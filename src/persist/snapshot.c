@@ -8,6 +8,7 @@
 #include "util/crc32.h"
 #include "util/log.h"
 
+#include <stdatomic.h>
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -288,6 +289,7 @@ fastkv_err_t fastkv_snapshot_load(const char *dir, struct fastkv_db *db, fastkv_
 
     LOG_INFO("snapshot berhasil dimuat (mmap): ts=%" PRIu64 " keys=%" PRIu64 " path=%s", ts, loaded,
         path);
+    atomic_store_explicit(&db->stat_num_keys, loaded, memory_order_relaxed);
     if (ts_out)
         *ts_out = (fastkv_ts_t)ts;
 

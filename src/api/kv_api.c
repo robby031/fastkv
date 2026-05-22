@@ -87,6 +87,8 @@ fastkv_err_t fastkv_open(fastkv_db_t **db_out, const fastkv_opts_t *opts) {
         return FASTKV_ERR_NOMEM;
     memset(db, 0, sizeof(*db));
     db->opts = *opts;
+    /* salin path agar DB tidak bergantung pada lifetime buffer pemanggil */
+    db->opts.path = strdup(opts->path ? opts->path : ".");
 
     fastkv_err_t rc;
 
@@ -182,6 +184,7 @@ fastkv_err_t fastkv_close(fastkv_db_t *db) {
 
     fastkv_txn_mgr_destroy(&db->txn_mgr);
     pthread_rwlock_destroy(&db->index_lock);
+    free((void *)db->opts.path);
     fkv_free(db);
     LOG_INFO("fastkv closed");
     return FASTKV_OK;
@@ -310,6 +313,8 @@ fastkv_err_t fastkv_db_apply_write_set(
 
             fastkv_ht_put(db->ht, commit_ts, e->key, e->value);
             fastkv_btree_insert(db->btree, e->key, e->value);
+            if (!had_old)
+                atomic_fetch_add_explicit(&db->stat_num_keys, 1, memory_order_relaxed);
 
             pthread_rwlock_rdlock(&db->index_lock);
             secondary_on_put(db->indexes, e->key, old_val, had_old, e->value);
@@ -321,6 +326,8 @@ fastkv_err_t fastkv_db_apply_write_set(
             fastkv_ht_delete(db->ht, commit_ts, e->key);
             fastkv_btree_delete(db->btree, e->key);
             fastkv_ttl_remove(db, e->key);
+            if (had_old)
+                atomic_fetch_sub_explicit(&db->stat_num_keys, 1, memory_order_relaxed);
 
             if (had_old) {
                 pthread_rwlock_rdlock(&db->index_lock);

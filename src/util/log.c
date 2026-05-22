@@ -49,3 +49,8 @@ void fastkv__log(fastkv_log_level_t level, const char *file, int line, const cha
     fputc('\n', out);
     fflush(out);
 }
+
+/* wrapper int agar bisa dipanggil dari log_public.c tanpa include log.h */
+void fastkv_log_set_level_int(int raw) {
+    g_level = (fastkv_log_level_t)raw;
+}

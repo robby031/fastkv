@@ -3,6 +3,7 @@ find_package(Threads REQUIRED)
 add_library(fastkv STATIC
     # util
     util/log.c
+    util/log_public.c
     util/crc32.c
     util/hash.c
 

@@ -19,9 +19,9 @@ package fastkv
 #include <stdlib.h>
 
 // declared in fastkv_cb_helper.c
-fastkv_err_t fastkv_index_lookup_go(fastkv_index_t *idx, fastkv_slice_t ik, void *handle);
+fastkv_err_t fastkv_index_lookup_go(fastkv_index_t *idx, fastkv_slice_t ik, uintptr_t handle);
 fastkv_err_t fastkv_index_range_go(fastkv_index_t *idx,
-    fastkv_slice_t min_ik, fastkv_slice_t max_ik, void *handle);
+    fastkv_slice_t min_ik, fastkv_slice_t max_ik, uintptr_t handle);
 */
 import "C"
 import (
@@ -74,12 +74,12 @@ func fromSlice(s C.fastkv_slice_t) []byte {
 	return C.GoBytes(unsafe.Pointer(s.data), C.int(s.len))
 }
 
-// go_index_scan_cb called from C (via wrap_scan_cb in helper.c).
-// udata is a cgo.Handle wrapping *[][]byte.
+// go_index_scan_cb is called from C (via wrap_scan_cb in helper.c).
+// handle is a cgo.Handle wrapped as a uintptr_t — GC-safe.
 //
 //export go_index_scan_cb
-func go_index_scan_cb(pk C.fastkv_slice_t, udata unsafe.Pointer) C.int {
-	h := cgo.Handle(udata)
+func go_index_scan_cb(pk C.fastkv_slice_t, handle C.uintptr_t) C.int {
+	h := cgo.Handle(handle)
 	hasil := h.Value().(*[][]byte)
 	*hasil = append(*hasil, fromSlice(pk))
 	return C.int(C.FASTKV_OK)
@@ -380,7 +380,7 @@ func (idx *Index) Lookup(indexKey []byte) ([][]byte, error) {
 	h := cgo.NewHandle(&results)
 	defer h.Delete()
 
-	rc := C.fastkv_index_lookup_go(idx.ptr, toSlice(indexKey), unsafe.Pointer(h))
+	rc := C.fastkv_index_lookup_go(idx.ptr, toSlice(indexKey), C.uintptr_t(h))
 	if err := toError(rc); err != nil {
 		return nil, err
 	}
@@ -393,9 +393,27 @@ func (idx *Index) Range(minKey, maxKey []byte) ([][]byte, error) {
 	h := cgo.NewHandle(&results)
 	defer h.Delete()
 
-	rc := C.fastkv_index_range_go(idx.ptr, toSlice(minKey), toSlice(maxKey), unsafe.Pointer(h))
+	rc := C.fastkv_index_range_go(idx.ptr, toSlice(minKey), toSlice(maxKey), C.uintptr_t(h))
 	if err := toError(rc); err != nil {
 		return nil, err
 	}
 	return results, nil
+}
+
+// SetLogLevel mengatur level log library fastkv.
+type LogLevel int
+
+const (
+	LogTrace  LogLevel = 0
+	LogDebug  LogLevel = 1
+	LogInfo   LogLevel = 2
+	LogWarn   LogLevel = 3
+	LogError  LogLevel = 4
+	LogFatal  LogLevel = 5
+	LogSilent LogLevel = 6
+)
+
+// SetLogLevel sets the log level for the fastkv library.
+func SetLogLevel(level LogLevel) {
+	C.fastkv_set_log_level(C.int(level))
 }

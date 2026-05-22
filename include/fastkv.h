@@ -93,6 +93,17 @@ typedef struct {
 
 fastkv_err_t fastkv_stats(fastkv_db_t *db, fastkv_stats_t *out);
 
+/* kontrol level log */
+#define FASTKV_LOG_TRACE  0
+#define FASTKV_LOG_DEBUG  1
+#define FASTKV_LOG_INFO   2
+#define FASTKV_LOG_WARN   3
+#define FASTKV_LOG_ERROR  4
+#define FASTKV_LOG_FATAL  5
+#define FASTKV_LOG_SILENT 6
+
+void fastkv_set_log_level(int level);
+
 #ifdef __cplusplus
 }
 #endif

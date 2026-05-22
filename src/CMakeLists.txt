@@ -43,6 +43,8 @@ target_include_directories(fastkv
     PRIVATE ${PROJECT_SOURCE_DIR}/src
 )
 
+target_compile_definitions(fastkv PRIVATE _POSIX_C_SOURCE=200809L)
+
 target_link_libraries(fastkv
     PUBLIC  fastkv_compiler_flags
             fastkv_sanitizers

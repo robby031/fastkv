@@ -1,6 +1,7 @@
 #include "snapshot.h"
 
-#include "api/kv_api.h" /* struct fastkv_db */
+#include "api/kv_api.h"
+#include "index/btree/btree.h"
 #include "mem/allocator.h"
 #include "storage/hashtable/ht.h"
 #include "util/crc32.h"
@@ -241,11 +242,12 @@ fastkv_err_t fastkv_snapshot_load(const char *dir, struct fastkv_db *db, fastkv_
         data_crc = fastkv_crc32c(data_crc, key_buf, klen);
         data_crc = fastkv_crc32c(data_crc, val_buf, vlen);
 
-        /* Insert into hashtable at the snapshot timestamp */
-        fastkv_err_t rc = fastkv_ht_put(
-            db->ht, (fastkv_ts_t)ts, FASTKV_SLICE(key_buf, klen), FASTKV_SLICE(val_buf, vlen));
-        if (rc != FASTKV_OK)
-            goto bad_buf;
+        fastkv_slice_t sk = FASTKV_SLICE(key_buf, klen);
+        fastkv_slice_t sv = FASTKV_SLICE(val_buf, vlen);
+
+        fastkv_err_t rc = fastkv_ht_put(db->ht, (fastkv_ts_t)ts, sk, sv);
+        if (rc != FASTKV_OK) goto bad_buf;
+        if (db->btree) fastkv_btree_insert(db->btree, sk, sv);
         loaded++;
         continue;
 

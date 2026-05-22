@@ -39,6 +39,9 @@ add_fastkv_test(test_crc32  unit/test_crc32.c)
 add_fastkv_test(test_wal_replay unit/test_wal_replay.c)
 add_fastkv_test(test_snapshot   unit/test_snapshot.c)
 add_fastkv_test(test_conflict   unit/test_conflict.c)
+add_fastkv_test(test_btree      unit/test_btree.c)
+add_fastkv_test(test_rtree      unit/test_rtree.c)
+add_fastkv_test(test_cursor     unit/test_cursor.c)
 
 # Integration tests  
 add_fastkv_test(test_crud           integration/test_crud.c)

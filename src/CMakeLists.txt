@@ -24,7 +24,7 @@ add_library(fastkv STATIC
     persist/snapshot.c
     persist/compaction.c
 
-    # index (stubs — Phase 3)
+    # index
     index/btree/btree.c
     index/rtree/rtree.c
 
@@ -40,7 +40,7 @@ target_include_directories(fastkv
 target_link_libraries(fastkv
     PUBLIC  fastkv_compiler_flags
             fastkv_sanitizers
-    PRIVATE Threads::Threads
+    PRIVATE Threads::Threads m
 )
 
 if(FASTKV_USE_JEMALLOC)

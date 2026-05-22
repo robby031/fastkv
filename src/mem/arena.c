@@ -92,8 +92,11 @@ void *fastkv_arena_alloc(fastkv_arena_t *arena, size_t size) {
 }
 
 void *fastkv_arena_dup(fastkv_arena_t *arena, const void *buf, size_t len) {
-    void *dst = fastkv_arena_alloc(arena, len);
-    if (dst)
+    /* alokasi len+1 agar hasil selalu null-terminated bila diperlakukan sebagai string */
+    char *dst = fastkv_arena_alloc(arena, len + 1);
+    if (dst) {
         memcpy(dst, buf, len);
+        dst[len] = '\0';
+    }
     return dst;
 }

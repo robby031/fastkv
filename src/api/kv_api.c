@@ -178,6 +178,7 @@ fastkv_err_t fastkv_close(fastkv_db_t *db) {
     while (idx) {
         fastkv_index_t *next = idx->next;
         fastkv_btree_destroy(idx->btree);
+        fkv_free(idx->udata);
         fkv_free(idx);
         idx = next;
     }
@@ -561,6 +562,7 @@ fastkv_err_t fastkv_index_drop(fastkv_db_t *db, const char *name) {
             *pp                   = found->next;
             pthread_rwlock_unlock(&db->index_lock);
             fastkv_btree_destroy(found->btree);
+            fkv_free(found->udata);
             fkv_free(found);
             LOG_INFO("index '%s' dihapus", name);
             return FASTKV_OK;

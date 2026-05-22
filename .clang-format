@@ -1,0 +1,26 @@
+---
+Language:        C
+BasedOnStyle:    LLVM
+IndentWidth:     4
+TabWidth:        4
+UseTab:          Never
+ColumnLimit:     100
+AlignConsecutiveAssignments: Consecutive
+AlignConsecutiveDeclarations: Consecutive
+AlignTrailingComments: true
+AllowShortFunctionsOnASingleLine: Empty
+AllowShortIfStatementsOnASingleLine: Never
+BreakBeforeBraces: Attach
+PointerAlignment: Right
+SpaceBeforeCpp11BracedList: true
+SortIncludes: CaseSensitive
+IncludeBlocks: Regroup
+IncludeCategories:
+  - Regex:           '^"fastkv\.h"'
+    Priority:        1
+  - Regex:           '^"fastkv/'
+    Priority:        2
+  - Regex:           '^"'
+    Priority:        3
+  - Regex:           '^<'
+    Priority:        4

@@ -1,0 +1,47 @@
+# Build directories
+build/
+build-*/
+cmake-build-*/
+out/
+docs/DESIGN.md
+
+# CMake cache and generated files
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+CTestTestfile.cmake
+Makefile
+install_manifest.txt
+compile_commands.json
+
+# Binary outputs
+*.a
+*.so
+*.dylib
+*.dll
+*.exe
+
+# Test artifacts
+Testing/
+/tmp/fastkv_*
+
+# Profiling / coverage
+*.gcov
+*.gcda
+*.gcno
+gmon.out
+perf.data
+perf.data.old
+*.profdata
+*.profraw
+
+# Editor noise
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Vendored test framework (fetched by CMake)
+tests/vendor/

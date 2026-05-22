@@ -1,0 +1,106 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-test:
+    name: ${{ matrix.os }} / ${{ matrix.compiler }} / ${{ matrix.build_type }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:         [ubuntu-24.04, macos-14]
+        compiler:   [gcc, clang]
+        build_type: [Debug, Release]
+        exclude:
+          # macOS ships clang as default cc; skip redundant GCC-on-macOS
+          - os: macos-14
+            compiler: gcc
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y cmake ninja-build valgrind
+
+      - name: Install dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: brew install cmake ninja
+
+      - name: Configure
+        run: |
+          cmake -B build \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+            -DCMAKE_C_COMPILER=${{ matrix.compiler }} \
+            -DFASTKV_BUILD_TESTS=ON \
+            -DFASTKV_BUILD_BENCH=ON
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Test
+        working-directory: build
+        run: ctest --output-on-failure --parallel 4
+
+  asan:
+    name: AddressSanitizer
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install
+        run: sudo apt-get update -qq && sudo apt-get install -y cmake ninja-build
+      - name: Configure
+        run: |
+          cmake -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_C_COMPILER=clang \
+            -DFASTKV_ENABLE_ASAN=ON \
+            -DFASTKV_BUILD_TESTS=ON
+      - name: Build & Test
+        run: cmake --build build --parallel && cd build && ctest --output-on-failure
+
+  tsan:
+    name: ThreadSanitizer
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install
+        run: sudo apt-get update -qq && sudo apt-get install -y cmake ninja-build
+      - name: Configure
+        run: |
+          cmake -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_C_COMPILER=clang \
+            -DFASTKV_ENABLE_TSAN=ON \
+            -DFASTKV_BUILD_TESTS=ON
+      - name: Build & Test
+        run: cmake --build build --parallel && cd build && ctest --output-on-failure
+
+  static-analysis:
+    name: clang-tidy
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install
+        run: sudo apt-get update -qq && sudo apt-get install -y cmake ninja-build clang-tidy
+      - name: Configure (generate compile_commands.json)
+        run: |
+          cmake -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_C_COMPILER=clang \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+            -DFASTKV_BUILD_TESTS=ON
+      - name: Run clang-tidy
+        run: |
+          find src -name '*.c' | xargs clang-tidy \
+            -p build \
+            --warnings-as-errors='*' \
+            --checks='-clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling'

@@ -2,15 +2,14 @@
 #include "mem/allocator.h"
 
 /* Phase 3 stub */
-
 struct fastkv_rtree { uint8_t ndims; };
 
 fastkv_err_t fastkv_rtree_create(fastkv_rtree_t **tree, uint8_t ndims)
 {
-    *tree = fkv_malloc(sizeof(**tree));
-    if (!*tree) return FASTKV_ERR_NOMEM;
-    (*tree)->ndims = ndims;
-    return FASTKV_OK;
+ *tree = fkv_malloc(sizeof(**tree));
+ if (!*tree) return FASTKV_ERR_NOMEM;
+ (*tree)->ndims = ndims;
+ return FASTKV_OK;
 }
 
 void fastkv_rtree_destroy(fastkv_rtree_t *tree) { fkv_free(tree); }

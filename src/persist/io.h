@@ -19,19 +19,13 @@ fastkv_err_t fastkv_io_open(fastkv_io_ctx_t **ctx, const char *path, int flags);
 fastkv_err_t fastkv_io_close(fastkv_io_ctx_t *ctx);
 
 /* Synchronous write — returns after data is durably persisted */
-fastkv_err_t fastkv_io_pwrite(fastkv_io_ctx_t *ctx,
-                               const void      *buf,
-                               size_t           len,
-                               uint64_t         offset);
+fastkv_err_t fastkv_io_pwrite(fastkv_io_ctx_t *ctx, const void  *buf, size_t len, uint64_t  offset);
 
 /* Flush all pending writes to durable storage */
 fastkv_err_t fastkv_io_sync(fastkv_io_ctx_t *ctx);
 
 /* Memory-map a range of the file for read access */
-fastkv_err_t fastkv_io_mmap(fastkv_io_ctx_t *ctx,
-                             uint64_t         offset,
-                             size_t           length,
-                             void           **addr_out);
+fastkv_err_t fastkv_io_mmap(fastkv_io_ctx_t *ctx,  uint64_t  offset,  size_t length,  void **addr_out);
 
 fastkv_err_t fastkv_io_munmap(void *addr, size_t length);
 

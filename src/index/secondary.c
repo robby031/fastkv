@@ -26,8 +26,7 @@ static fastkv_slice_t make_composite(fastkv_slice_t ik, fastkv_slice_t pk) {
 }
 
 /* buat salinan null-terminated dari slice agar callback aman pakai strstr/strtok */
-static fastkv_slice_t nt_copy(fastkv_slice_t s)
-{
+static fastkv_slice_t nt_copy(fastkv_slice_t s) {
     uint8_t *buf = fkv_malloc(s.len + 1);
     if (!buf)
         return FASTKV_SLICE_NULL;
@@ -43,8 +42,8 @@ static void remove_index_entry(
     fastkv_slice_t safe = nt_copy(val);
     if (!safe.data && val.len)
         return;
-    fastkv_slice_t ik = FASTKV_SLICE_NULL;
-    int skip = fn(pk, safe, &ik, udata);
+    fastkv_slice_t ik   = FASTKV_SLICE_NULL;
+    int            skip = fn(pk, safe, &ik, udata);
     if (skip == 0 && ik.data) {
         /* ik.data mungkin menunjuk ke dalam safe — buat composite dulu baru bebaskan */
         fastkv_slice_t comp = make_composite(ik, pk);
@@ -63,8 +62,8 @@ static void add_index_entry(
     fastkv_slice_t safe = nt_copy(val);
     if (!safe.data && val.len)
         return;
-    fastkv_slice_t ik = FASTKV_SLICE_NULL;
-    int skip = fn(pk, safe, &ik, udata);
+    fastkv_slice_t ik   = FASTKV_SLICE_NULL;
+    int            skip = fn(pk, safe, &ik, udata);
     if (skip == 0 && ik.data) {
         fastkv_slice_t comp = make_composite(ik, pk);
         fkv_free((void *)safe.data);

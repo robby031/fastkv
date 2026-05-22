@@ -1,27 +1,23 @@
-#include "unity.h"
 #include "index/btree/btree.h"
+#include "unity.h"
 
 #include <string.h>
 
 static fastkv_btree_t *tree;
 
-void setUp(void)
-{
+void setUp(void) {
     fastkv_btree_create(&tree);
 }
 
-void tearDown(void)
-{
+void tearDown(void) {
     fastkv_btree_destroy(tree);
 }
 
-static fastkv_slice_t str(const char *s)
-{
+static fastkv_slice_t str(const char *s) {
     return FASTKV_STR(s);
 }
 
-void test_insert_and_get(void)
-{
+void test_insert_and_get(void) {
     fastkv_btree_insert(tree, str("b"), str("2"));
     fastkv_btree_insert(tree, str("a"), str("1"));
     fastkv_btree_insert(tree, str("c"), str("3"));
@@ -36,8 +32,7 @@ void test_insert_and_get(void)
     TEST_ASSERT_EQUAL_INT(FASTKV_ERR_NOTFOUND, fastkv_btree_get(tree, str("z"), &val));
 }
 
-void test_update_existing_key(void)
-{
+void test_update_existing_key(void) {
     fastkv_btree_insert(tree, str("k"), str("old"));
     fastkv_btree_insert(tree, str("k"), str("new"));
 
@@ -46,8 +41,7 @@ void test_update_existing_key(void)
     TEST_ASSERT_EQUAL_MEMORY("new", val.data, 3);
 }
 
-void test_delete(void)
-{
+void test_delete(void) {
     fastkv_btree_insert(tree, str("x"), str("val"));
     TEST_ASSERT_EQUAL_INT(FASTKV_OK, fastkv_btree_delete(tree, str("x")));
     TEST_ASSERT_EQUAL_INT(FASTKV_ERR_NOTFOUND, fastkv_btree_delete(tree, str("x")));
@@ -56,10 +50,12 @@ void test_delete(void)
     TEST_ASSERT_EQUAL_INT(FASTKV_ERR_NOTFOUND, fastkv_btree_get(tree, str("x"), &val));
 }
 
-typedef struct { char keys[16][32]; int n; } collected_t;
+typedef struct {
+    char keys[16][32];
+    int  n;
+} collected_t;
 
-static fastkv_err_t collect(fastkv_slice_t key, fastkv_slice_t val, void *ud)
-{
+static fastkv_err_t collect(fastkv_slice_t key, fastkv_slice_t val, void *ud) {
     (void)val;
     collected_t *c = ud;
     if (c->n < 16) {
@@ -70,16 +66,15 @@ static fastkv_err_t collect(fastkv_slice_t key, fastkv_slice_t val, void *ud)
     return FASTKV_OK;
 }
 
-void test_scan_forward_order(void)
-{
+void test_scan_forward_order(void) {
     fastkv_btree_insert(tree, str("dog"), str("1"));
     fastkv_btree_insert(tree, str("ant"), str("2"));
     fastkv_btree_insert(tree, str("cat"), str("3"));
     fastkv_btree_insert(tree, str("eel"), str("4"));
 
     collected_t c = {0};
-    fastkv_btree_scan(tree, FASTKV_SLICE_NULL, FASTKV_SLICE_NULL,
-        FASTKV_CURSOR_FORWARD, collect, &c);
+    fastkv_btree_scan(
+        tree, FASTKV_SLICE_NULL, FASTKV_SLICE_NULL, FASTKV_CURSOR_FORWARD, collect, &c);
 
     TEST_ASSERT_EQUAL_INT(4, c.n);
     TEST_ASSERT_EQUAL_STRING("ant", c.keys[0]);
@@ -88,15 +83,14 @@ void test_scan_forward_order(void)
     TEST_ASSERT_EQUAL_STRING("eel", c.keys[3]);
 }
 
-void test_scan_backward_order(void)
-{
+void test_scan_backward_order(void) {
     fastkv_btree_insert(tree, str("dog"), str("1"));
     fastkv_btree_insert(tree, str("ant"), str("2"));
     fastkv_btree_insert(tree, str("cat"), str("3"));
 
     collected_t c = {0};
-    fastkv_btree_scan(tree, FASTKV_SLICE_NULL, FASTKV_SLICE_NULL,
-        FASTKV_CURSOR_BACKWARD, collect, &c);
+    fastkv_btree_scan(
+        tree, FASTKV_SLICE_NULL, FASTKV_SLICE_NULL, FASTKV_CURSOR_BACKWARD, collect, &c);
 
     TEST_ASSERT_EQUAL_INT(3, c.n);
     TEST_ASSERT_EQUAL_STRING("dog", c.keys[0]);
@@ -104,8 +98,7 @@ void test_scan_backward_order(void)
     TEST_ASSERT_EQUAL_STRING("ant", c.keys[2]);
 }
 
-void test_scan_range(void)
-{
+void test_scan_range(void) {
     fastkv_btree_insert(tree, str("a"), str("1"));
     fastkv_btree_insert(tree, str("b"), str("2"));
     fastkv_btree_insert(tree, str("c"), str("3"));
@@ -113,8 +106,7 @@ void test_scan_range(void)
     fastkv_btree_insert(tree, str("e"), str("5"));
 
     collected_t c = {0};
-    fastkv_btree_scan(tree, str("b"), str("d"),
-        FASTKV_CURSOR_FORWARD, collect, &c);
+    fastkv_btree_scan(tree, str("b"), str("d"), FASTKV_CURSOR_FORWARD, collect, &c);
 
     TEST_ASSERT_EQUAL_INT(3, c.n);
     TEST_ASSERT_EQUAL_STRING("b", c.keys[0]);
@@ -122,8 +114,7 @@ void test_scan_range(void)
     TEST_ASSERT_EQUAL_STRING("d", c.keys[2]);
 }
 
-void test_large_insert_stays_sorted(void)
-{
+void test_large_insert_stays_sorted(void) {
     /* sisipkan lebih dari BTREE_ORDER entri untuk memicu split */
     char key[8], val[8];
     for (int i = 99; i >= 0; i--) {
@@ -133,17 +124,16 @@ void test_large_insert_stays_sorted(void)
     }
 
     collected_t c = {0};
-    fastkv_btree_scan(tree, FASTKV_SLICE_NULL, FASTKV_SLICE_NULL,
-        FASTKV_CURSOR_FORWARD, collect, &c);
+    fastkv_btree_scan(
+        tree, FASTKV_SLICE_NULL, FASTKV_SLICE_NULL, FASTKV_CURSOR_FORWARD, collect, &c);
 
-    TEST_ASSERT_EQUAL_INT(16, c.n);  /* hanya 16 yang bisa ditampung di collected_t */
+    TEST_ASSERT_EQUAL_INT(16, c.n); /* hanya 16 yang bisa ditampung di collected_t */
     TEST_ASSERT_EQUAL_STRING("000", c.keys[0]);
     TEST_ASSERT_EQUAL_STRING("001", c.keys[1]);
     TEST_ASSERT_EQUAL_STRING("015", c.keys[15]);
 }
 
-int main(void)
-{
+int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_insert_and_get);
     RUN_TEST(test_update_existing_key);

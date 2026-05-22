@@ -12,8 +12,7 @@
 typedef struct fastkv_btree fastkv_btree_t;
 
 /* callback untuk scan — kembalikan selain FASTKV_OK untuk berhenti */
-typedef fastkv_err_t (*fastkv_btree_scan_cb)(
-    fastkv_slice_t key, fastkv_slice_t value, void *udata);
+typedef fastkv_err_t (*fastkv_btree_scan_cb)(fastkv_slice_t key, fastkv_slice_t value, void *udata);
 
 fastkv_err_t fastkv_btree_create(fastkv_btree_t **tree);
 void         fastkv_btree_destroy(fastkv_btree_t *tree);

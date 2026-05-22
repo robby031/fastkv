@@ -18,8 +18,7 @@ static const char  *db_path = "/tmp/fastkv_test_stress";
 static _Atomic int write_errors;
 static _Atomic int read_errors;
 
-static void *writer_fn(void *arg)
-{
+static void *writer_fn(void *arg) {
     int id = (int)(intptr_t)arg;
     for (int i = 0; i < OPS_PER_THREAD; i++) {
         char key[64], val[64];
@@ -32,18 +31,17 @@ static void *writer_fn(void *arg)
     return NULL;
 }
 
-static void *reader_fn(void *arg)
-{
+static void *reader_fn(void *arg) {
     int id = (int)(intptr_t)arg;
     for (int i = 0; i < OPS_PER_THREAD; i++) {
         /* baca kunci acak dari writer mana saja */
-        int w = i % NUM_WRITERS;
-        int k = i % OPS_PER_THREAD;
+        int  w = i % NUM_WRITERS;
+        int  k = i % OPS_PER_THREAD;
         char key[64];
         snprintf(key, sizeof key, "w%d:key%d", w, k);
 
         fastkv_slice_t val;
-        fastkv_err_t rc = fastkv_get(db, FASTKV_STR(key), &val);
+        fastkv_err_t   rc = fastkv_get(db, FASTKV_STR(key), &val);
         /* boleh NOT_FOUND — tergantung urutan eksekusi */
         if (rc != FASTKV_OK && rc != FASTKV_ERR_NOTFOUND)
             atomic_fetch_add(&read_errors, 1);
@@ -54,8 +52,7 @@ static void *reader_fn(void *arg)
     return NULL;
 }
 
-static void *txn_writer_fn(void *arg)
-{
+static void *txn_writer_fn(void *arg) {
     int id = (int)(intptr_t)arg;
     for (int i = 0; i < OPS_PER_THREAD / 10; i++) {
         fastkv_txn_t *txn;
@@ -78,31 +75,28 @@ static void *txn_writer_fn(void *arg)
     return NULL;
 }
 
-void setUp(void)
-{
+void setUp(void) {
     char cmd[256];
     snprintf(cmd, sizeof cmd, "mkdir -p %s", db_path);
     system(cmd);
 
     fastkv_opts_t opts = FASTKV_OPTS_DEFAULT;
-    opts.path = db_path;
-    opts.sync_writes = false;
+    opts.path          = db_path;
+    opts.sync_writes   = false;
     TEST_ASSERT_EQUAL_INT(FASTKV_OK, fastkv_open(&db, &opts));
 
     atomic_store(&write_errors, 0);
     atomic_store(&read_errors, 0);
 }
 
-void tearDown(void)
-{
+void tearDown(void) {
     fastkv_close(db);
     char cmd[256];
     snprintf(cmd, sizeof cmd, "rm -rf %s", db_path);
     system(cmd);
 }
 
-void test_concurrent_writers(void)
-{
+void test_concurrent_writers(void) {
     pthread_t threads[NUM_WRITERS];
     for (int i = 0; i < NUM_WRITERS; i++)
         pthread_create(&threads[i], NULL, writer_fn, (void *)(intptr_t)i);
@@ -123,8 +117,7 @@ void test_concurrent_writers(void)
     }
 }
 
-void test_concurrent_readers_writers(void)
-{
+void test_concurrent_readers_writers(void) {
     /* tulis dulu beberapa kunci supaya reader punya sesuatu */
     for (int i = 0; i < NUM_WRITERS; i++) {
         for (int k = 0; k < 10; k++) {
@@ -141,15 +134,16 @@ void test_concurrent_readers_writers(void)
     for (int i = 0; i < NUM_READERS; i++)
         pthread_create(&rt[i], NULL, reader_fn, (void *)(intptr_t)i);
 
-    for (int i = 0; i < NUM_WRITERS; i++) pthread_join(wt[i], NULL);
-    for (int i = 0; i < NUM_READERS; i++) pthread_join(rt[i], NULL);
+    for (int i = 0; i < NUM_WRITERS; i++)
+        pthread_join(wt[i], NULL);
+    for (int i = 0; i < NUM_READERS; i++)
+        pthread_join(rt[i], NULL);
 
     TEST_ASSERT_EQUAL_INT(0, atomic_load(&write_errors));
     TEST_ASSERT_EQUAL_INT(0, atomic_load(&read_errors));
 }
 
-void test_concurrent_transactions(void)
-{
+void test_concurrent_transactions(void) {
     pthread_t threads[NUM_WRITERS];
     for (int i = 0; i < NUM_WRITERS; i++)
         pthread_create(&threads[i], NULL, txn_writer_fn, (void *)(intptr_t)i);
@@ -159,8 +153,7 @@ void test_concurrent_transactions(void)
     TEST_ASSERT_EQUAL_INT(0, atomic_load(&write_errors));
 }
 
-int main(void)
-{
+int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_concurrent_writers);
     RUN_TEST(test_concurrent_readers_writers);

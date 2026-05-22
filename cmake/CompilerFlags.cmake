@@ -10,7 +10,8 @@ target_compile_options(fastkv_compiler_flags INTERFACE
  -Wconversion
  -Wno-unused-parameter
  $<$<CONFIG:Debug>: -O0 -g3 -DDEBUG>
- $<$<CONFIG:Release>: -O3 -DNDEBUG -march=native>
+ $<$<CONFIG:Release>: -O3 -DNDEBUG>
+ $<$<AND:$<CONFIG:Release>,$<NOT:$<BOOL:${CMAKE_CROSSCOMPILING}>>>: -march=native>
  $<$<CONFIG:RelWithDebInfo>: -O2 -g -DNDEBUG>
 )
 

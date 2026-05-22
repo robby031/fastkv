@@ -148,15 +148,20 @@ _lib_dir = os.path.join(_root, "build", "src")
 _lib_file = os.path.join(_lib_dir, "libfastkv.a")
 
 import sys
+import platform
 print(f"include_dir : {_include_dir}", file=sys.stderr)
 print(f"lib_file    : {_lib_file} (exists={os.path.exists(_lib_file)})", file=sys.stderr)
+
+_link_args = ["-lpthread", "-lm"]
+if platform.system() == "Linux":
+    _link_args.append("-latomic")
 
 ffi.set_source(
     "fastkv._libfastkv",
     '#include "fastkv.h"',
     include_dirs=[_include_dir],
     extra_objects=[_lib_file],
-    extra_link_args=["-lpthread", "-lm", "-latomic"],
+    extra_link_args=_link_args,
 )
 
 if __name__ == "__main__":

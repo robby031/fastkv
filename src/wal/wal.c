@@ -9,6 +9,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -28,8 +29,10 @@ struct fastkv_wal {
     uint64_t         file_offset;
     uint64_t         segment_id;
 
-    uint8_t buf[WAL_BUF_CAP];
-    size_t  buf_len;
+    uint8_t         buf[WAL_BUF_CAP];
+    size_t          buf_len;
+
+    pthread_mutex_t lock;
 };
 
 /* Low-level read helpers for replay */
@@ -51,6 +54,7 @@ fastkv_err_t fastkv_wal_open(fastkv_wal_t **wal, const char *dir, bool sync_writ
         return FASTKV_ERR_NOMEM;
 
     memset(w, 0, sizeof(*w));
+    pthread_mutex_init(&w->lock, NULL);
     size_t dirlen = strlen(dir);
     w->dir = fkv_malloc(dirlen + 1);
     if (!w->dir) {
@@ -126,6 +130,7 @@ fastkv_err_t fastkv_wal_close(fastkv_wal_t *wal) {
     flush_buf(wal, true);
     fastkv_io_close(wal->io);
     fkv_free(wal->dir);
+    pthread_mutex_destroy(&wal->lock);
     fkv_free(wal);
     return FASTKV_OK;
 }
@@ -168,34 +173,39 @@ fastkv_err_t fastkv_wal_append(fastkv_wal_t *wal, fastkv_wal_rec_type_t type, fa
 
     uint8_t t = (uint8_t)type;
 
+    pthread_mutex_lock(&wal->lock);
     fastkv_err_t rc;
     if ((rc = wal_write_buf(wal, &crc, 4)) != FASTKV_OK)
-        return rc;
+        goto done;
     if ((rc = wal_write_buf(wal, &t, 1)) != FASTKV_OK)
-        return rc;
+        goto done;
     if ((rc = wal_write_buf(wal, &ts, 8)) != FASTKV_OK)
-        return rc;
+        goto done;
     if ((rc = wal_write_buf(wal, &klen, 4)) != FASTKV_OK)
-        return rc;
+        goto done;
     if ((rc = wal_write_buf(wal, &vlen, 4)) != FASTKV_OK)
-        return rc;
+        goto done;
     if (key.len && (rc = wal_write_buf(wal, key.data, key.len)) != FASTKV_OK)
-        return rc;
+        goto done;
     if (value.len && (rc = wal_write_buf(wal, value.data, value.len)) != FASTKV_OK)
-        return rc;
+        goto done;
 
     wal->bytes_written += WAL_HEADER_SIZE + key.len + (value.data ? value.len : 0);
 
-    if (wal->sync_writes) {
-        return flush_buf(wal, true);
-    }
-    return FASTKV_OK;
+    if (wal->sync_writes)
+        rc = flush_buf(wal, true);
+done:
+    pthread_mutex_unlock(&wal->lock);
+    return rc;
 }
 
 fastkv_err_t fastkv_wal_sync(fastkv_wal_t *wal) {
     if (!wal)
         return FASTKV_OK;
-    return flush_buf(wal, true);
+    pthread_mutex_lock(&wal->lock);
+    fastkv_err_t rc = flush_buf(wal, true);
+    pthread_mutex_unlock(&wal->lock);
+    return rc;
 }
 
 /* Replay */
@@ -389,6 +399,7 @@ fastkv_err_t fastkv_wal_replay(const char *dir, fastkv_ts_t since_ts, fastkv_wal
 /* Maintenance */
 
 fastkv_err_t fastkv_wal_rotate(fastkv_wal_t *wal) {
+    pthread_mutex_lock(&wal->lock);
     flush_buf(wal, true);
     if (wal->io)
         fastkv_io_close(wal->io);
@@ -400,6 +411,7 @@ fastkv_err_t fastkv_wal_rotate(fastkv_wal_t *wal) {
     snprintf(path, sizeof path, WAL_FILENAME_FMT, wal->dir, wal->segment_id);
 
     fastkv_err_t rc = fastkv_io_open(&wal->io, path, O_CREAT | O_RDWR);
+    pthread_mutex_unlock(&wal->lock);
     if (rc != FASTKV_OK)
         return rc;
 
@@ -429,8 +441,18 @@ fastkv_err_t fastkv_wal_trim(const char *dir, uint64_t keep_from_id) {
 }
 
 uint64_t fastkv_wal_current_segment(fastkv_wal_t *wal) {
-    return wal ? wal->segment_id : 0;
+    if (!wal)
+        return 0;
+    pthread_mutex_lock(&wal->lock);
+    uint64_t id = wal->segment_id;
+    pthread_mutex_unlock(&wal->lock);
+    return id;
 }
 uint64_t fastkv_wal_bytes_written(fastkv_wal_t *wal) {
-    return wal ? wal->bytes_written : 0;
+    if (!wal)
+        return 0;
+    pthread_mutex_lock(&wal->lock);
+    uint64_t n = wal->bytes_written;
+    pthread_mutex_unlock(&wal->lock);
+    return n;
 }

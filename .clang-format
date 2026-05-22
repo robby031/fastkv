@@ -10,6 +10,9 @@ AlignConsecutiveDeclarations: Consecutive
 AlignTrailingComments: true
 AllowShortFunctionsOnASingleLine: Empty
 AllowShortIfStatementsOnASingleLine: Never
+AlignAfterOpenBracket: DontAlign
+ContinuationIndentWidth: 4
+
 BreakBeforeBraces: Attach
 PointerAlignment: Right
 SpaceBeforeCpp11BracedList: true

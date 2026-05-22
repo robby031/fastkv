@@ -3,7 +3,7 @@ build/
 build-*/
 cmake-build-*/
 out/
-docs/DESIGN.md
+docs/*.md
 
 # CMake cache and generated files
 CMakeCache.txt

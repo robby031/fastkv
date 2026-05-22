@@ -12,25 +12,25 @@
  * scratch space (MVCC version chains, write-set entries, etc.).
  */
 
-#define FASTKV_ARENA_DEFAULT_BLOCK (64u * 1024u)  /* 64 KiB */
+#define FASTKV_ARENA_DEFAULT_BLOCK (64u * 1024u) /* 64 KiB */
 
 typedef struct fastkv_arena_block {
- struct fastkv_arena_block *next;
- size_t cap;
- size_t used;
- uint8_t  data[];
+    struct fastkv_arena_block *next;
+    size_t                     cap;
+    size_t                     used;
+    uint8_t                    data[];
 } fastkv_arena_block_t;
 
 typedef struct {
- fastkv_arena_block_t *head; /* current (newest) block */
- fastkv_arena_block_t *base; /* first block (reused on reset) */
- size_t block_size;
- size_t total_allocated;
+    fastkv_arena_block_t *head; /* current (newest) block */
+    fastkv_arena_block_t *base; /* first block (reused on reset) */
+    size_t                block_size;
+    size_t                total_allocated;
 } fastkv_arena_t;
 
 fastkv_arena_t *fastkv_arena_create(size_t block_size);
-void fastkv_arena_destroy(fastkv_arena_t *arena);
-void fastkv_arena_reset(fastkv_arena_t *arena); /* keep memory, zero cursors */
+void            fastkv_arena_destroy(fastkv_arena_t *arena);
+void            fastkv_arena_reset(fastkv_arena_t *arena); /* keep memory, zero cursors */
 
 void *fastkv_arena_alloc(fastkv_arena_t *arena, size_t size);
 void *fastkv_arena_alloc_aligned(fastkv_arena_t *arena, size_t size, size_t align);

@@ -1,6 +1,6 @@
 find_package(PkgConfig QUIET)
 
-# Unity test framework (vendored, single-file) ───────────────────────
+# Unity test framework (vendored, single-file)  
 # Download unity.c/.h if not present — CI fetches them automatically.
 set(UNITY_DIR ${CMAKE_CURRENT_SOURCE_DIR}/vendor/unity)
 if(NOT EXISTS ${UNITY_DIR}/unity.c)
@@ -19,7 +19,7 @@ endif()
 add_library(unity STATIC ${UNITY_DIR}/unity.c)
 target_include_directories(unity PUBLIC ${UNITY_DIR})
 
-# Helper macro ───────────────────────────────────────────────────────
+# Helper macro  
 function(add_fastkv_test name src)
  add_executable(${name} ${src})
  target_link_libraries(${name} PRIVATE fastkv unity)
@@ -30,17 +30,21 @@ function(add_fastkv_test name src)
  add_test(NAME ${name} COMMAND ${name})
 endfunction()
 
-# Unit tests ─────────────────────────────────────────────────────────
+# Unit tests  
 add_fastkv_test(test_arena  unit/test_arena.c)
 add_fastkv_test(test_hashtable  unit/test_hashtable.c)
 add_fastkv_test(test_wal unit/test_wal.c)
 add_fastkv_test(test_txn unit/test_txn.c)
 add_fastkv_test(test_crc32  unit/test_crc32.c)
+add_fastkv_test(test_wal_replay unit/test_wal_replay.c)
+add_fastkv_test(test_snapshot   unit/test_snapshot.c)
+add_fastkv_test(test_conflict   unit/test_conflict.c)
 
-# Integration tests ──────────────────────────────────────────────────
-add_fastkv_test(test_crud integration/test_crud.c)
+# Integration tests  
+add_fastkv_test(test_crud           integration/test_crud.c)
+add_fastkv_test(test_crash_recovery integration/test_crash_recovery.c)
 
-# Fuzz targets (clang only) ──────────────────────────────────────────
+# Fuzz targets (clang only)  
 if(FASTKV_BUILD_FUZZ)
  add_executable(fuzz_api fuzz/fuzz_api.c)
  target_link_libraries(fuzz_api PRIVATE fastkv)

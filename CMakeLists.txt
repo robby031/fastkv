@@ -48,15 +48,19 @@ install(TARGETS fastkv
 install(DIRECTORY include/fastkv DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 install(FILES include/fastkv.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
-# Summary ─
-message(STATUS "####### FastKV ${PROJECT_VERSION} #######")
+# Summary  
+message(STATUS "
+##########################################
+               FastKV ${PROJECT_VERSION} 
+##########################################")
 message(STATUS "  C standard  : C${CMAKE_C_STANDARD}")
 message(STATUS "  Build type  : ${CMAKE_BUILD_TYPE}")
-message(STATUS "  Tests : ${FASTKV_BUILD_TESTS}")
+message(STATUS "  Tests       : ${FASTKV_BUILD_TESTS}")
 message(STATUS "  Benchmarks  : ${FASTKV_BUILD_BENCH}")
-message(STATUS "  Fuzz : ${FASTKV_BUILD_FUZZ}")
-message(STATUS "  jemalloc : ${FASTKV_USE_JEMALLOC}")
-message(STATUS "  io_uring : ${FASTKV_USE_IOURING}")
-message(STATUS "  ASan : ${FASTKV_ENABLE_ASAN}")
-message(STATUS "  TSan : ${FASTKV_ENABLE_TSAN}")
-message(STATUS "##########################################")
+message(STATUS "  Fuzz        : ${FASTKV_BUILD_FUZZ}")
+message(STATUS "  jemalloc    : ${FASTKV_USE_JEMALLOC}")
+message(STATUS "  io_uring    : ${FASTKV_USE_IOURING}")
+message(STATUS "  ASan        : ${FASTKV_ENABLE_ASAN}")
+message(STATUS "  TSan        : ${FASTKV_ENABLE_TSAN}")
+message(STATUS "
+##########################################")

@@ -96,7 +96,7 @@ fastkv_err_t fastkv_snapshot_write(const char *dir, fastkv_ts_t ts, struct fastk
         }
     }
 
-    char path[4096], tmp_path[4096];
+    char path[4096], tmp_path[4100];
     snprintf(path, sizeof path, "%s/" SNAP_FILENAME_FMT, dir, ts);
     snprintf(tmp_path, sizeof tmp_path, "%s.tmp", path);
 

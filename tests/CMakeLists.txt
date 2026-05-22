@@ -22,6 +22,7 @@ target_include_directories(unity PUBLIC ${UNITY_DIR})
 # Helper macro  
 function(add_fastkv_test name src)
  add_executable(${name} ${src})
+ target_compile_definitions(${name} PRIVATE _POSIX_C_SOURCE=200809L)
  target_link_libraries(${name} PRIVATE fastkv unity)
  target_include_directories(${name} PRIVATE
  ${PROJECT_SOURCE_DIR}/src

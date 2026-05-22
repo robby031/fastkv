@@ -1,22 +1,3 @@
-/*
- * Fuzzer utama FastKV — LibFuzzer + AddressSanitizer
- *
- * Cara kompilasi:
- *   cmake -B build-fuzz -DCMAKE_C_COMPILER=clang -DFASTKV_BUILD_FUZZ=ON
- *   make -C build-fuzz fuzz_db
- *
- * Cara menjalankan fuzzing (sanity check 30 detik):
- *   ./build-fuzz/fuzz/fuzz_db -max_total_time=30 -max_len=512
- *
- * Cara menjalankan fuzzing 24 jam (background):
- *   mkdir -p fuzz_corpus
- *   nohup ./build-fuzz/fuzz/fuzz_db fuzz_corpus -max_total_time=86400 \
- *         -max_len=1024 -jobs=4 -workers=4 &
- *
- * Cara mengeksport ke AFL++:
- *   afl-fuzz -i fuzz_corpus -o fuzz_findings -- ./build-fuzz/fuzz/fuzz_db @@
- */
-
 #include "fastkv.h"
 
 #include <stddef.h>
@@ -25,9 +6,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* ------------------------------------------------------------------ */
-/*  Daftar kode operasi yang bisa dipilih oleh LibFuzzer               */
-/* ------------------------------------------------------------------ */
 #define OP_PUT 0
 #define OP_GET 1
 #define OP_DELETE 2
@@ -38,10 +16,6 @@
 #define OP_CURSOR_SCAN 7
 #define OP_COUNT 8
 
-/* ------------------------------------------------------------------ */
-/*  State global — db dibuka sekali dan dipakai berulang antar run     */
-/*  agar fuzzer bisa menguji state yang lebih kompleks (stateful)      */
-/* ------------------------------------------------------------------ */
 static fastkv_db_t *g_db    = NULL;
 static const char  *DB_PATH = "/tmp/fastkv_fuzz_db";
 
@@ -74,9 +48,7 @@ __attribute__((constructor)) static void fuzz_init(void) {
     buka_db();
 }
 
-/* ------------------------------------------------------------------ */
-/*  Pembaca byte berurutan dari buffer input LibFuzzer                 */
-/* ------------------------------------------------------------------ */
+/*  Pembaca byte berurutan dari buffer input LibFuzzer */
 typedef struct {
     const uint8_t *ptr;
     const uint8_t *end;
@@ -97,9 +69,7 @@ static const uint8_t *baca_bytes(bacaan_t *b, size_t n) {
     return out;
 }
 
-/* ------------------------------------------------------------------ */
-/*  Entry point LibFuzzer — dipanggil berulang kali oleh engine        */
-/* ------------------------------------------------------------------ */
+/*  Entry point LibFuzzer — dipanggil berulang kali oleh engine */
 int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
     if (!g_db || size < 3)
         return 0;

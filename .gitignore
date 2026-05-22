@@ -21,6 +21,9 @@ compile_commands.json
 *.dll
 *.exe
 
+# Fuzzing artifacts
+fuzz_corpus/
+
 # Test artifacts
 Testing/
 /tmp/fastkv_*

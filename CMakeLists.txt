@@ -39,6 +39,11 @@ if(FASTKV_BUILD_BENCH)
  add_subdirectory(bench)
 endif()
 
+# Fuzz Targets
+if(FASTKV_BUILD_FUZZ)
+ add_subdirectory(fuzz)
+endif()
+
 # Install rules 
 include(GNUInstallDirs)
 install(TARGETS fastkv

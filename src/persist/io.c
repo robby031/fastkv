@@ -5,10 +5,19 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <string.h>
-#include <sys/stat.h>
 #include <sys/mman.h>
+#include <sys/stat.h>
 #include <unistd.h>
+
+static inline fastkv_err_t fastkv_offset_to_offt(uint64_t offset, off_t *out) {
+    if (offset > (uint64_t)INT64_MAX)
+        return FASTKV_ERR_INVAL;
+
+    *out = (off_t)offset;
+    return FASTKV_OK;
+}
 
 #if defined(__linux__) && defined(FASTKV_USE_IOURING)
 #include <liburing.h>
@@ -27,7 +36,7 @@ fastkv_err_t fastkv_io_open(fastkv_io_ctx_t **ctx, const char *path, int flags) 
     if (!c)
         return FASTKV_ERR_NOMEM;
 
-    c->fd          = open(path, flags, 0644);
+    c->fd = open(path, flags, 0644);
     if (c->fd < 0) {
         fkv_free(c);
         return FASTKV_ERR_IO;
@@ -67,9 +76,11 @@ fastkv_err_t fastkv_io_close(fastkv_io_ctx_t *ctx) {
 }
 
 fastkv_err_t fastkv_io_size(fastkv_io_ctx_t *ctx, uint64_t *size_out) {
-    if (!ctx || !size_out) return FASTKV_ERR_INVAL;
+    if (!ctx || !size_out)
+        return FASTKV_ERR_INVAL;
     struct stat st;
-    if (fstat(ctx->fd, &st) != 0) return FASTKV_ERR_IO;
+    if (fstat(ctx->fd, &st) != 0)
+        return FASTKV_ERR_IO;
     *size_out = (uint64_t)st.st_size;
     return FASTKV_OK;
 }
@@ -81,20 +92,36 @@ fastkv_err_t fastkv_io_pwrite(fastkv_io_ctx_t *ctx, const void *buf, size_t len,
         struct io_uring_sqe *sqe = io_uring_get_sqe(&ctx->ring);
         if (!sqe)
             return FASTKV_ERR_IO;
-        io_uring_prep_write(sqe, ctx->fd, buf, len, offset);
+
+        off_t        off;
+        fastkv_err_t rc = fastkv_offset_to_offt(offset, &off);
+        if (rc != FASTKV_OK)
+            return rc;
+
+        io_uring_prep_write(sqe, ctx->fd, buf, len, off);
         io_uring_submit(&ctx->ring);
 
         struct io_uring_cqe *cqe;
-        int                  rc = io_uring_wait_cqe(&ctx->ring, &cqe);
-        if (rc < 0 || cqe->res < 0) {
-            if (cqe)
-                io_uring_cqe_seen(&ctx->ring, cqe);
+        int                  wait_rc = io_uring_wait_cqe(&ctx->ring, &cqe);
+        if (wait_rc < 0) {
             return FASTKV_ERR_IO;
         }
+
+        if (cqe->res < 0) {
+            io_uring_cqe_seen(&ctx->ring, cqe);
+            return FASTKV_ERR_IO;
+        }
+
         io_uring_cqe_seen(&ctx->ring, cqe);
         return FASTKV_OK;
     } else {
-        ssize_t written = pwrite(ctx->fd, buf, len, offset);
+
+        off_t        off;
+        fastkv_err_t rc = fastkv_offset_to_offt(offset, &off);
+        if (rc != FASTKV_OK)
+            return rc;
+
+        ssize_t written = pwrite(ctx->fd, buf, len, off);
         return written == (ssize_t)len ? FASTKV_OK : FASTKV_ERR_IO;
     }
 }
@@ -112,12 +139,23 @@ fastkv_err_t fastkv_io_pwrite_async(
             if (!sqe)
                 return FASTKV_ERR_IO;
         }
-        io_uring_prep_write(sqe, ctx->fd, buf, len, offset);
+
+        off_t        off;
+        fastkv_err_t rc = fastkv_offset_to_offt(offset, &off);
+        if (rc != FASTKV_OK)
+            return rc;
+
+        io_uring_prep_write(sqe, ctx->fd, buf, len, off);
         ctx->pending_ops++;
         return FASTKV_OK;
     } else {
         /* Fallback: just do it synchronously */
-        ssize_t written = pwrite(ctx->fd, buf, len, offset);
+        off_t        off;
+        fastkv_err_t rc = fastkv_offset_to_offt(offset, &off);
+        if (rc != FASTKV_OK)
+            return rc;
+
+        ssize_t written = pwrite(ctx->fd, buf, len, off);
         return written == (ssize_t)len ? FASTKV_OK : FASTKV_ERR_IO;
     }
 }
@@ -161,7 +199,7 @@ fastkv_err_t fastkv_io_open(fastkv_io_ctx_t **ctx, const char *path, int flags) 
     if (!c)
         return FASTKV_ERR_NOMEM;
 
-    c->fd          = open(path, flags, 0644);
+    c->fd = open(path, flags, 0644);
     if (c->fd < 0) {
         fkv_free(c);
         return FASTKV_ERR_IO;
@@ -180,9 +218,11 @@ fastkv_err_t fastkv_io_close(fastkv_io_ctx_t *ctx) {
 }
 
 fastkv_err_t fastkv_io_size(fastkv_io_ctx_t *ctx, uint64_t *size_out) {
-    if (!ctx || !size_out) return FASTKV_ERR_INVAL;
+    if (!ctx || !size_out)
+        return FASTKV_ERR_INVAL;
     struct stat st;
-    if (fstat(ctx->fd, &st) != 0) return FASTKV_ERR_IO;
+    if (fstat(ctx->fd, &st) != 0)
+        return FASTKV_ERR_IO;
     *size_out = (uint64_t)st.st_size;
     return FASTKV_OK;
 }
@@ -190,7 +230,13 @@ fastkv_err_t fastkv_io_size(fastkv_io_ctx_t *ctx, uint64_t *size_out) {
 fastkv_err_t fastkv_io_pwrite(fastkv_io_ctx_t *ctx, const void *buf, size_t len, uint64_t offset) {
     if (!ctx)
         return FASTKV_ERR_INVAL;
-    ssize_t written = pwrite(ctx->fd, buf, len, offset);
+
+    off_t        off;
+    fastkv_err_t rc = fastkv_offset_to_offt(offset, &off);
+    if (rc != FASTKV_OK)
+        return rc;
+
+    ssize_t written = pwrite(ctx->fd, buf, len, off);
     return written == (ssize_t)len ? FASTKV_OK : FASTKV_ERR_IO;
 }
 
@@ -211,7 +257,13 @@ fastkv_err_t fastkv_io_sync(fastkv_io_ctx_t *ctx) {
 fastkv_err_t fastkv_io_mmap(fastkv_io_ctx_t *ctx, uint64_t offset, size_t length, void **addr_out) {
     if (!ctx || !addr_out)
         return FASTKV_ERR_INVAL;
-    void *addr = mmap(NULL, length, PROT_READ, MAP_SHARED, ctx->fd, offset);
+
+    off_t        off;
+    fastkv_err_t rc = fastkv_offset_to_offt(offset, &off);
+    if (rc != FASTKV_OK)
+        return rc;
+
+    void *addr = mmap(NULL, length, PROT_READ, MAP_SHARED, ctx->fd, off);
     if (addr == MAP_FAILED)
         return FASTKV_ERR_IO;
     *addr_out = addr;

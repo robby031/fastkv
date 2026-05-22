@@ -41,7 +41,8 @@ void fastkv__log(fastkv_log_level_t level, const char *file, int line, const cha
 
     va_list ap;
     va_start(ap, fmt);
-    vfprintf(out, fmt, ap);
+    if (fmt)
+        vfprintf(out, fmt, ap);
     va_end(ap);
 
     fputc('\n', out);

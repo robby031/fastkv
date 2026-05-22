@@ -1,0 +1,4 @@
+# Supres leak dari pthread internal (TLS dan stack thread)
+leak:pthread_create
+leak:__pthread_initialize_minimal
+leak:tls_get_addr_tail

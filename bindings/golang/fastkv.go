@@ -376,26 +376,26 @@ type Index struct {
 
 // Lookup finds all primary keys matching the indexKey.
 func (idx *Index) Lookup(indexKey []byte) ([][]byte, error) {
-	var h [][]byte
-	h := cgo.NewHandle(&h)
+	var results [][]byte
+	h := cgo.NewHandle(&results)
 	defer h.Delete()
 
 	rc := C.fastkv_index_lookup_go(idx.ptr, toSlice(indexKey), unsafe.Pointer(h))
 	if err := toError(rc); err != nil {
 		return nil, err
 	}
-	return h, nil
+	return results, nil
 }
 
 // Range finds all primary keys within the index range [minKey, maxKey].
 func (idx *Index) Range(minKey, maxKey []byte) ([][]byte, error) {
-	var h [][]byte
-	h := cgo.NewHandle(&h)
+	var results [][]byte
+	h := cgo.NewHandle(&results)
 	defer h.Delete()
 
 	rc := C.fastkv_index_range_go(idx.ptr, toSlice(minKey), toSlice(maxKey), unsafe.Pointer(h))
 	if err := toError(rc); err != nil {
 		return nil, err
 	}
-	return h, nil
+	return results, nil
 }

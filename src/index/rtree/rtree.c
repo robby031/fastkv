@@ -64,8 +64,8 @@ static void rect_expand(fastkv_coord_t *dst_mn, fastkv_coord_t *dst_mx,
 /* hitung luas MBR jika diperbesar mencakup entry e */
 static double rect_enlarged_area(
     const fastkv_coord_t *mn, const fastkv_coord_t *mx, const rentry_t *e, int ndims) {
-    fastkv_coord_t nmn[RTREE_MAX_DIMS];
-    fastkv_coord_t nmx[RTREE_MAX_DIMS];
+    fastkv_coord_t nmn[RTREE_MAX_DIMS] = {0};
+    fastkv_coord_t nmx[RTREE_MAX_DIMS] = {0};
     for (int i = 0; i < ndims; i++) {
         nmn[i] = mn[i] < e->min[i] ? mn[i] : e->min[i];
         nmx[i] = mx[i] > e->max[i] ? mx[i] : e->max[i];

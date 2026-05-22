@@ -145,13 +145,14 @@ _root = os.path.abspath(os.path.join(_script_dir, "..", ".."))
 _include_dir = os.path.join(_root, "include")
 _lib_dir = os.path.join(_root, "build", "src")
 
+_lib_file = os.path.join(_lib_dir, "libfastkv.a")
+
 ffi.set_source(
     "fastkv._libfastkv",
     '#include "fastkv.h"',
     include_dirs=[_include_dir],
-    library_dirs=[_lib_dir],
-    libraries=["fastkv"],
-    extra_link_args=["-Wl,-rpath," + _lib_dir],
+    extra_objects=[_lib_file],
+    extra_link_args=["-lpthread", "-lm"],
 )
 
 if __name__ == "__main__":

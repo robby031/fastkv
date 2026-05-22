@@ -51,12 +51,13 @@ fastkv_err_t fastkv_wal_open(fastkv_wal_t **wal, const char *dir, bool sync_writ
         return FASTKV_ERR_NOMEM;
 
     memset(w, 0, sizeof(*w));
-    w->dir = fkv_malloc(strlen(dir) + 1);
+    size_t dirlen = strlen(dir);
+    w->dir = fkv_malloc(dirlen + 1);
     if (!w->dir) {
         fkv_free(w);
         return FASTKV_ERR_NOMEM;
     }
-    strcpy(w->dir, dir);
+    memcpy(w->dir, dir, dirlen + 1);
     w->sync_writes = sync_writes;
 
     /* Find the highest existing segment ID */

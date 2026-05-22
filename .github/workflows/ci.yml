@@ -64,7 +64,7 @@ jobs:
             -DFASTKV_ENABLE_ASAN=ON \
             -DFASTKV_BUILD_TESTS=ON
       - name: Build & Test
-        run: cmake --build build --parallel && cd build && ctest --output-on-failure
+        run: cmake --build build --parallel && cd build && LSAN_OPTIONS="suppressions=${{ github.workspace }}/lsan.supp" ctest --output-on-failure
 
   tsan:
     name: ThreadSanitizer

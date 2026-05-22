@@ -18,11 +18,15 @@ typedef struct fastkv_io_ctx fastkv_io_ctx_t;
 
 fastkv_err_t fastkv_io_open(fastkv_io_ctx_t **ctx, const char *path, int flags);
 fastkv_err_t fastkv_io_close(fastkv_io_ctx_t *ctx);
+fastkv_err_t fastkv_io_size(fastkv_io_ctx_t *ctx, uint64_t *size_out);
 
-/* Synchronous write — returns after data is durably persisted */
+/* Synchronous write — returns after data is durably persisted (if required by backend) or at least written */
 fastkv_err_t fastkv_io_pwrite(fastkv_io_ctx_t *ctx, const void *buf, size_t len, uint64_t offset);
 
-/* Flush all pending writes to durable storage */
+/* Submit a write asynchronously. Buffer must remain valid until synced/completed. */
+fastkv_err_t fastkv_io_pwrite_async(fastkv_io_ctx_t *ctx, const void *buf, size_t len, uint64_t offset);
+
+/* Flush all pending writes to durable storage and wait for completion */
 fastkv_err_t fastkv_io_sync(fastkv_io_ctx_t *ctx);
 
 /* Memory-map a range of the file for read access */

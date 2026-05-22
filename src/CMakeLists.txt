@@ -21,6 +21,7 @@ add_library(fastkv STATIC
     txn/txn_manager.c
 
     # persist
+    persist/io.c
     persist/snapshot.c
     persist/compaction.c
 

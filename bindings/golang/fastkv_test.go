@@ -23,7 +23,7 @@ func openDB(t *testing.T) *DB {
 	opts.SyncWrites = false
 	db, err := Open(dbPath(t), opts)
 	if err != nil {
-		t.Fatalf("Open gagal: %v", err)
+		t.Fatalf("Fail to open DB: %v", err)
 	}
 	t.Cleanup(func() { db.Close() })
 	return db
@@ -32,35 +32,35 @@ func openDB(t *testing.T) *DB {
 func TestPutGet(t *testing.T) {
 	db := openDB(t)
 
-	if err := db.Put([]byte("kunci"), []byte("nilai")); err != nil {
+	if err := db.Put([]byte("key"), []byte("value")); err != nil {
 		t.Fatal(err)
 	}
-	val, err := db.Get([]byte("kunci"))
+	val, err := db.Get([]byte("key"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(val) != "nilai" {
-		t.Errorf("nilai salah: %q", val)
+	if string(val) != "value" {
+		t.Errorf("wrong value: %q", val)
 	}
 }
 
 func TestNotFound(t *testing.T) {
 	db := openDB(t)
-	_, err := db.Get([]byte("tidak_ada"))
+	_, err := db.Get([]byte("not_found"))
 	if err != ErrNotFound {
-		t.Errorf("harusnya ErrNotFound, dapat %v", err)
+		t.Errorf("should be ErrNotFound, got %v", err)
 	}
 }
 
 func TestDelete(t *testing.T) {
 	db := openDB(t)
-	db.Put([]byte("del"), []byte("isi"))
+	db.Put([]byte("del"), []byte("value"))
 	if err := db.Delete([]byte("del")); err != nil {
 		t.Fatal(err)
 	}
 	_, err := db.Get([]byte("del"))
 	if err != ErrNotFound {
-		t.Errorf("harusnya ErrNotFound setelah delete, dapat %v", err)
+		t.Errorf("should be ErrNotFound after delete, got %v", err)
 	}
 }
 
@@ -79,21 +79,21 @@ func TestTxnCommit(t *testing.T) {
 
 	val, _ := db.Get([]byte("a"))
 	if string(val) != "1" {
-		t.Errorf("nilai a salah: %q", val)
+		t.Errorf("wrong value for a: %q", val)
 	}
 }
 
 func TestTxnRollback(t *testing.T) {
 	db := openDB(t)
-	db.Put([]byte("stabil"), []byte("ya"))
+	db.Put([]byte("stable"), []byte("value"))
 
 	txn, _ := db.Begin(false)
-	txn.Put([]byte("baru"), []byte("isi"))
+	txn.Put([]byte("new"), []byte("value"))
 	txn.Rollback()
 
-	_, err := db.Get([]byte("baru"))
+	_, err := db.Get([]byte("new"))
 	if err != ErrNotFound {
-		t.Error("kunci seharusnya tidak ada setelah rollback")
+		t.Error("key should not exist after rollback")
 	}
 }
 
@@ -126,11 +126,11 @@ func TestCursorForward(t *testing.T) {
 	}
 
 	if len(keys) != 5 {
-		t.Errorf("jumlah kunci: %d, harusnya 5", len(keys))
+		t.Errorf("number of keys: %d, expected 5", len(keys))
 	}
 	for i := 1; i < len(keys); i++ {
 		if keys[i] <= keys[i-1] {
-			t.Errorf("urutan salah: %q setelah %q", keys[i], keys[i-1])
+			t.Errorf("wrong order: %q after %q", keys[i], keys[i-1])
 		}
 	}
 }
@@ -150,12 +150,12 @@ func TestCursorSeek(t *testing.T) {
 	cur.Seek([]byte("c"))
 	k, _ := cur.Key()
 	if string(k) != "c" {
-		t.Errorf("seek ke c, dapat %q", k)
+		t.Errorf("seek to c, got %q", k)
 	}
 	cur.Next()
 	k, _ = cur.Key()
 	if string(k) != "e" {
-		t.Errorf("setelah c harusnya e, dapat %q", k)
+		t.Errorf("after c should be e, got %q", k)
 	}
 }
 
@@ -177,7 +177,7 @@ func TestJSONIndex(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(hasil) != 2 {
-		t.Errorf("harusnya 2 hasil, dapat %d", len(hasil))
+		t.Errorf("should have 2 results, got %d", len(hasil))
 	}
 }
 
@@ -192,7 +192,7 @@ func TestConcurrentPut(t *testing.T) {
 				key := fmt.Sprintf("w%d:k%d", id, j)
 				val := fmt.Sprintf("val_%d_%d", id, j)
 				if err := db.Put([]byte(key), []byte(val)); err != nil {
-					t.Errorf("Put gagal: %v", err)
+					t.Errorf("Put failed: %v", err)
 				}
 			}
 		}(i)
@@ -204,21 +204,21 @@ func TestConcurrentPut(t *testing.T) {
 		t.Fatal(err)
 	}
 	if stats.NumKeys < 800 {
-		t.Errorf("jumlah kunci %d, harusnya >= 800", stats.NumKeys)
+		t.Errorf("number of keys %d, expected >= 800", stats.NumKeys)
 	}
 }
 
 func TestPutTTL(t *testing.T) {
 	db := openDB(t)
-	if err := db.PutTTL([]byte("ttl"), []byte("isi"), 10_000); err != nil {
+	if err := db.PutTTL([]byte("ttl"), []byte("value"), 10_000); err != nil {
 		t.Fatal(err)
 	}
 	val, err := db.Get([]byte("ttl"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(val) != "isi" {
-		t.Errorf("nilai TTL salah: %q", val)
+	if string(val) != "value" {
+		t.Errorf("wrong TTL value: %q", val)
 	}
 }
 
@@ -234,7 +234,7 @@ func BenchmarkPut(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		key := fmt.Sprintf("key%d", i)
-		db.Put([]byte(key), []byte("nilai"))
+		db.Put([]byte(key), []byte("value"))
 	}
 }
 

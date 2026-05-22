@@ -1,7 +1,7 @@
 """
 Test Python binding FastKV.
-Jalankan: pytest tests/
-Pastikan library sudah di-build: python fastkv_ffi_build.py
+Run: pytest tests/
+Make sure the library is built: python fastkv_ffi_build.py
 """
 
 import os
@@ -16,7 +16,7 @@ DB_PATH = tempfile.mkdtemp(prefix="fastkv_pytest_")
 
 
 @pytest.fixture(autouse=True)
-def bersihkan():
+def cleanup():
     shutil.rmtree(DB_PATH, ignore_errors=True)
     os.makedirs(DB_PATH)
     yield
@@ -26,8 +26,8 @@ def bersihkan():
 
 def test_put_get():
     with DB(DB_PATH, sync_writes=False) as db:
-        db.put(b"kunci", b"nilai")
-        assert db.get(b"kunci") == b"nilai"
+        db.put(b"key", b"value")
+        assert db.get(b"key") == b"value"
 
 
 def test_delete():
@@ -41,14 +41,14 @@ def test_delete():
 def test_not_found():
     with DB(DB_PATH, sync_writes=False) as db:
         with pytest.raises(NotFoundError):
-            db.get(b"tidak_ada")
+            db.get(b"not_found")
 
 
 def test_overwrite():
     with DB(DB_PATH, sync_writes=False) as db:
-        db.put(b"k", b"lama")
-        db.put(b"k", b"baru")
-        assert db.get(b"k") == b"baru"
+        db.put(b"k", b"old")
+        db.put(b"k", b"new")
+        assert db.get(b"k") == b"new"
 
 
 def test_txn_commit():
@@ -63,22 +63,22 @@ def test_txn_commit():
 
 def test_txn_abort():
     with DB(DB_PATH, sync_writes=False) as db:
-        db.put(b"stabil", b"ada")
+        db.put(b"stable", b"value")
 
         txn = db.begin()
-        txn.put(b"baru", b"nilai")
+        txn.put(b"new", b"value")
         txn.abort()
 
         with pytest.raises(NotFoundError):
-            db.get(b"baru")
-        assert db.get(b"stabil") == b"ada"
+            db.get(b"new")
+        assert db.get(b"stable") == b"value"
 
 
 def test_txn_read_only():
     with DB(DB_PATH, sync_writes=False) as db:
-        db.put(b"ro", b"isi")
+        db.put(b"ro", b"value")
         with db.begin(read_only=True) as txn:
-            assert txn.get(b"ro") == b"isi"
+            assert txn.get(b"ro") == b"value"
 
 
 def test_cursor_forward():
@@ -98,7 +98,7 @@ def test_cursor_forward():
 def test_cursor_backward():
     with DB(DB_PATH, sync_writes=False) as db:
         for i in range(5):
-            db.put(f"key{i:02d}".encode(), b"v")
+            db.put(f"key{i:02d}".encode(), f"val{i}".encode())
 
         with db.begin(read_only=True) as txn:
             with txn.cursor(forward=False) as cur:
@@ -127,22 +127,22 @@ def test_json_index():
     with DB(DB_PATH, sync_writes=False) as db:
         idx = db.json_index("by_role", "role")
 
-        db.put(b"u:1", b'{"role":"admin","name":"ali"}')
-        db.put(b"u:2", b'{"role":"user","name":"budi"}')
-        db.put(b"u:3", b'{"role":"admin","name":"citra"}')
+        db.put(b"u:1", b'{"role":"admin","name":"robby"}')
+        db.put(b"u:2", b'{"role":"user","name":"eka"}')
+        db.put(b"u:3", b'{"role":"admin","name":"arman"}')
 
-        hasil = idx.lookup(b"admin")
-        assert len(hasil) == 2
-        assert b"u:1" in hasil
-        assert b"u:3" in hasil
+        h = idx.lookup(b"admin")
+        assert len(h) == 2
+        assert b"u:1" in h
+        assert b"u:3" in h
 
         db.drop_index("by_role")
 
 
 def test_put_ttl_visible():
     with DB(DB_PATH, sync_writes=False) as db:
-        db.put_ttl(b"sementara", b"isi", 10_000)
-        assert db.get(b"sementara") == b"isi"
+        db.put_ttl(b"temp", b"value", 10_000)
+        assert db.get(b"temp") == b"value"
 
 
 def test_stats():
@@ -156,6 +156,6 @@ def test_stats():
 
 def test_sync():
     with DB(DB_PATH, sync_writes=False) as db:
-        db.put(b"flush", b"ini")
+        db.put(b"flush", b"this")
         db.sync()
-        assert db.get(b"flush") == b"ini"
+        assert db.get(b"flush") == b"this"

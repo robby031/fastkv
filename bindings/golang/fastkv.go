@@ -1,13 +1,13 @@
-// Package fastkv menyediakan binding Go untuk library FastKV.
+// Package fastkv provides Go bindings for the FastKV library.
 //
-// Penggunaan dasar:
+// Basic usage:
 //
 //	db, err := fastkv.Open("/tmp/mydb", fastkv.DefaultOpts())
 //	if err != nil { log.Fatal(err) }
 //	defer db.Close()
 //
-//	db.Put([]byte("kunci"), []byte("nilai"))
-//	val, _ := db.Get([]byte("kunci"))
+//	db.Put([]byte("key"), []byte("value"))
+//	val, _ := db.Get([]byte("key"))
 //	fmt.Println(string(val))
 package fastkv
 
@@ -18,7 +18,7 @@ package fastkv
 #include "fastkv.h"
 #include <stdlib.h>
 
-// dideklarasikan di fastkv_cb_helper.c
+// declared in fastkv_cb_helper.c
 fastkv_err_t fastkv_index_lookup_go(fastkv_index_t *idx, fastkv_slice_t ik, void *handle);
 fastkv_err_t fastkv_index_range_go(fastkv_index_t *idx,
     fastkv_slice_t min_ik, fastkv_slice_t max_ik, void *handle);
@@ -32,12 +32,12 @@ import (
 	"unsafe"
 )
 
-// Error standar FastKV
+// Standard FastKV errors
 var (
-	ErrNotFound  = errors.New("kunci tidak ditemukan")
-	ErrConflict  = errors.New("konflik transaksi write-write")
-	ErrReadOnly  = errors.New("write pada transaksi read-only")
-	ErrCursorEOF = errors.New("cursor sudah habis")
+	ErrNotFound  = errors.New("key not found")
+	ErrConflict  = errors.New("transaction write-write conflict")
+	ErrReadOnly  = errors.New("write on read-only transaction")
+	ErrCursorEOF = errors.New("cursor already exhausted")
 )
 
 func toError(rc C.fastkv_err_t) error {
@@ -74,8 +74,8 @@ func fromSlice(s C.fastkv_slice_t) []byte {
 	return C.GoBytes(unsafe.Pointer(s.data), C.int(s.len))
 }
 
-// go_index_scan_cb dipanggil dari C (via wrap_scan_cb di helper.c).
-// udata adalah cgo.Handle yang membungkus *[][]byte.
+// go_index_scan_cb called from C (via wrap_scan_cb in helper.c).
+// udata is a cgo.Handle wrapping *[][]byte.
 //
 //export go_index_scan_cb
 func go_index_scan_cb(pk C.fastkv_slice_t, udata unsafe.Pointer) C.int {
@@ -85,7 +85,7 @@ func go_index_scan_cb(pk C.fastkv_slice_t, udata unsafe.Pointer) C.int {
 	return C.int(C.FASTKV_OK)
 }
 
-// Opts berisi konfigurasi pembukaan database.
+// Opts contains configuration for opening the database.
 type Opts struct {
 	MapSize    int
 	ArenaSize  int
@@ -93,7 +93,7 @@ type Opts struct {
 	ReadOnly   bool
 }
 
-// DefaultOpts mengembalikan konfigurasi default yang wajar.
+// DefaultOpts returns a reasonable default configuration.
 func DefaultOpts() Opts {
 	return Opts{
 		MapSize:    1024 * 1024,
@@ -103,15 +103,15 @@ func DefaultOpts() Opts {
 	}
 }
 
-// DB adalah handle utama database FastKV.
-// Aman digunakan dari banyak goroutine secara bersamaan.
+// DB is the main handle for the FastKV database.
+// Safe for concurrent use by multiple goroutines.
 type DB struct {
 	mu     sync.RWMutex
 	ptr    *C.fastkv_db_t
 	closed bool
 }
 
-// Open membuka database di path yang diberikan.
+// Open opens a database at the given path.
 func Open(path string, opts Opts) (*DB, error) {
 	cpath := C.CString(path)
 	defer C.free(unsafe.Pointer(cpath))
@@ -133,7 +133,7 @@ func Open(path string, opts Opts) (*DB, error) {
 	return db, nil
 }
 
-// Close menutup database.
+// Close closes the database.
 func (db *DB) Close() error {
 	db.mu.Lock()
 	defer db.mu.Unlock()
@@ -145,14 +145,14 @@ func (db *DB) Close() error {
 	return toError(C.fastkv_close(db.ptr))
 }
 
-// Sync melakukan WAL flush dan checkpoint secara eksplisit.
+// Sync performs an explicit WAL flush and checkpoint.
 func (db *DB) Sync() error {
 	db.mu.RLock()
 	defer db.mu.RUnlock()
 	return toError(C.fastkv_sync(db.ptr))
 }
 
-// Get membaca nilai untuk kunci yang diberikan.
+// Get reads the value for the given key.
 func (db *DB) Get(key []byte) ([]byte, error) {
 	db.mu.RLock()
 	defer db.mu.RUnlock()
@@ -165,28 +165,28 @@ func (db *DB) Get(key []byte) ([]byte, error) {
 	return val, nil
 }
 
-// Put menyimpan pasangan kunci-nilai.
+// Put stores a key-value pair.
 func (db *DB) Put(key, value []byte) error {
 	db.mu.RLock()
 	defer db.mu.RUnlock()
 	return toError(C.fastkv_put(db.ptr, toSlice(key), toSlice(value)))
 }
 
-// PutTTL menyimpan kunci dengan TTL dalam milidetik.
+// PutTTL stores a key with a TTL in milliseconds.
 func (db *DB) PutTTL(key, value []byte, ttlMs uint64) error {
 	db.mu.RLock()
 	defer db.mu.RUnlock()
 	return toError(C.fastkv_put_ttl(db.ptr, toSlice(key), toSlice(value), C.uint64_t(ttlMs)))
 }
 
-// Delete menghapus kunci dari database.
+// Delete removes a key from the database.
 func (db *DB) Delete(key []byte) error {
 	db.mu.RLock()
 	defer db.mu.RUnlock()
 	return toError(C.fastkv_delete(db.ptr, toSlice(key)))
 }
 
-// Stats mengembalikan statistik operasional database.
+// Stats returns operational statistics of the database.
 func (db *DB) Stats() (Stats, error) {
 	db.mu.RLock()
 	defer db.mu.RUnlock()
@@ -205,7 +205,7 @@ func (db *DB) Stats() (Stats, error) {
 	}, nil
 }
 
-// Stats berisi statistik operasional database.
+// Stats contains operational statistics of the database.
 type Stats struct {
 	NumKeys         uint64
 	NumTxnCommitted uint64
@@ -216,7 +216,7 @@ type Stats struct {
 	ArenaAllocBytes uint64
 }
 
-// Begin membuka transaksi baru.
+// Begin starts a new transaction.
 func (db *DB) Begin(readOnly bool) (*Txn, error) {
 	db.mu.RLock()
 	var ptr *C.fastkv_txn_t
@@ -230,7 +230,7 @@ func (db *DB) Begin(readOnly bool) (*Txn, error) {
 	return t, nil
 }
 
-// JSONIndex membuat index sekunder berbasis field JSON.
+// JSONIndex creates a secondary index based on a JSON field.
 func (db *DB) JSONIndex(name, field string) (*Index, error) {
 	db.mu.RLock()
 	defer db.mu.RUnlock()
@@ -247,7 +247,7 @@ func (db *DB) JSONIndex(name, field string) (*Index, error) {
 	return &Index{db: db, ptr: ptr, name: name}, nil
 }
 
-// DropIndex menghapus index dengan nama yang diberikan.
+// DropIndex removes the index with the given name.
 func (db *DB) DropIndex(name string) error {
 	db.mu.RLock()
 	defer db.mu.RUnlock()
@@ -256,7 +256,7 @@ func (db *DB) DropIndex(name string) error {
 	return toError(C.fastkv_index_drop(db.ptr, cname))
 }
 
-// Txn adalah transaksi eksplisit FastKV.
+// Txn is an explicit FastKV transaction.
 type Txn struct {
 	db   *DB
 	ptr  *C.fastkv_txn_t
@@ -270,7 +270,7 @@ func (t *Txn) rollback() {
 	}
 }
 
-// Get membaca kunci dalam transaksi ini.
+// Get reads a key within this transaction.
 func (t *Txn) Get(key []byte) ([]byte, error) {
 	var s C.fastkv_slice_t
 	if err := toError(C.fastkv_txn_get(t.ptr, toSlice(key), &s)); err != nil {
@@ -279,33 +279,33 @@ func (t *Txn) Get(key []byte) ([]byte, error) {
 	return fromSlice(s), nil
 }
 
-// Put menyimpan kunci-nilai dalam transaksi ini.
+// Put stores a key-value pair within this transaction.
 func (t *Txn) Put(key, value []byte) error {
 	return toError(C.fastkv_txn_put(t.ptr, toSlice(key), toSlice(value)))
 }
 
-// Delete menghapus kunci dalam transaksi ini.
+// Delete removes a key within this transaction.
 func (t *Txn) Delete(key []byte) error {
 	return toError(C.fastkv_txn_delete(t.ptr, toSlice(key)))
 }
 
-// Commit menyelesaikan dan mengkomit transaksi.
+// Commit completes and commits the transaction.
 func (t *Txn) Commit() error {
 	if t.done {
-		return errors.New("transaksi sudah selesai")
+		return errors.New("transaction already completed")
 	}
 	t.done = true
 	runtime.SetFinalizer(t, nil)
 	return toError(C.fastkv_txn_commit(t.ptr))
 }
 
-// Rollback membatalkan transaksi.
+// Rollback aborts the transaction.
 func (t *Txn) Rollback() {
 	t.rollback()
 	runtime.SetFinalizer(t, nil)
 }
 
-// Cursor membuka cursor pada transaksi ini.
+// Cursor opens a cursor on this transaction.
 func (t *Txn) Cursor(forward bool) (*Cursor, error) {
 	dir := C.FASTKV_CURSOR_FORWARD
 	if !forward {
@@ -320,18 +320,18 @@ func (t *Txn) Cursor(forward bool) (*Cursor, error) {
 	return c, nil
 }
 
-// Cursor adalah pembaca berurutan atas snapshot B+tree.
+// Cursor is a sequential reader over a B+tree snapshot.
 type Cursor struct {
 	ptr    *C.fastkv_cursor_t
 	closed bool
 }
 
-// Seek memposisikan cursor ke kunci >= key.
+// Seek positions the cursor at the key >= key.
 func (c *Cursor) Seek(key []byte) error {
 	return toError(C.fastkv_cursor_seek(c.ptr, toSlice(key)))
 }
 
-// Next maju ke entri berikutnya. Kembalikan (false, nil) jika sudah habis.
+// Next advances to the next entry. Returns (false, nil) if at the end.
 func (c *Cursor) Next() (bool, error) {
 	rc := C.fastkv_cursor_next(c.ptr)
 	if rc == C.FASTKV_ERR_CURSOR_EOF {
@@ -340,7 +340,7 @@ func (c *Cursor) Next() (bool, error) {
 	return rc == C.FASTKV_OK, toError(rc)
 }
 
-// Key mengembalikan kunci pada posisi cursor saat ini.
+// Key returns the key at the current cursor position.
 func (c *Cursor) Key() ([]byte, error) {
 	var s C.fastkv_slice_t
 	if err := toError(C.fastkv_cursor_key(c.ptr, &s)); err != nil {
@@ -349,7 +349,7 @@ func (c *Cursor) Key() ([]byte, error) {
 	return fromSlice(s), nil
 }
 
-// Value mengembalikan nilai pada posisi cursor saat ini.
+// Value returns the value at the current cursor position.
 func (c *Cursor) Value() ([]byte, error) {
 	var s C.fastkv_slice_t
 	if err := toError(C.fastkv_cursor_value(c.ptr, &s)); err != nil {
@@ -358,7 +358,7 @@ func (c *Cursor) Value() ([]byte, error) {
 	return fromSlice(s), nil
 }
 
-// Close menutup cursor.
+// Close closes the cursor.
 func (c *Cursor) Close() {
 	if !c.closed {
 		C.fastkv_cursor_close(c.ptr)
@@ -367,35 +367,35 @@ func (c *Cursor) Close() {
 	}
 }
 
-// Index adalah handle index sekunder FastKV.
+// Index is a handle to a FastKV secondary index.
 type Index struct {
 	db   *DB
 	ptr  *C.fastkv_index_t
 	name string
 }
 
-// Lookup mencari semua primary key yang cocok dengan indexKey.
+// Lookup finds all primary keys matching the indexKey.
 func (idx *Index) Lookup(indexKey []byte) ([][]byte, error) {
-	var hasil [][]byte
-	h := cgo.NewHandle(&hasil)
+	var h [][]byte
+	h := cgo.NewHandle(&h)
 	defer h.Delete()
 
 	rc := C.fastkv_index_lookup_go(idx.ptr, toSlice(indexKey), unsafe.Pointer(h))
 	if err := toError(rc); err != nil {
 		return nil, err
 	}
-	return hasil, nil
+	return h, nil
 }
 
-// Range mencari semua primary key dalam rentang index [minKey, maxKey].
+// Range finds all primary keys within the index range [minKey, maxKey].
 func (idx *Index) Range(minKey, maxKey []byte) ([][]byte, error) {
-	var hasil [][]byte
-	h := cgo.NewHandle(&hasil)
+	var h [][]byte
+	h := cgo.NewHandle(&h)
 	defer h.Delete()
 
 	rc := C.fastkv_index_range_go(idx.ptr, toSlice(minKey), toSlice(maxKey), unsafe.Pointer(h))
 	if err := toError(rc); err != nil {
 		return nil, err
 	}
-	return hasil, nil
+	return h, nil
 }

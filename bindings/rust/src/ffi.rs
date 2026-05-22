@@ -1,5 +1,5 @@
-//! Deklarasi FFI mentah — hasil terjemahan manual dari fastkv.h dan fastkv/types.h.
-//! Jangan gunakan langsung; gunakan tipe safe di modul induk.
+//! Raw FFI declarations — manually translated from fastkv.h and fastkv/types.h.
+//! Don't use them directly; use safe types in the parent module.
 
 #![allow(non_camel_case_types, dead_code)]
 
@@ -90,14 +90,14 @@ unsafe extern "C" {
     pub fn fastkv_close(db: *mut fastkv_db_t) -> fastkv_err_t;
     pub fn fastkv_sync(db: *mut fastkv_db_t) -> fastkv_err_t;
 
-    /* operasi dasar */
+    /* basic operations */
     pub fn fastkv_get(db: *mut fastkv_db_t, key: fastkv_slice_t, value_out: *mut fastkv_slice_t) -> fastkv_err_t;
     pub fn fastkv_put(db: *mut fastkv_db_t, key: fastkv_slice_t, value: fastkv_slice_t) -> fastkv_err_t;
     pub fn fastkv_delete(db: *mut fastkv_db_t, key: fastkv_slice_t) -> fastkv_err_t;
     pub fn fastkv_free_value(db: *mut fastkv_db_t, value: *mut fastkv_slice_t);
     pub fn fastkv_put_ttl(db: *mut fastkv_db_t, key: fastkv_slice_t, value: fastkv_slice_t, ttl_ms: u64) -> fastkv_err_t;
 
-    /* transaksi */
+    /* transactions */
     pub fn fastkv_txn_begin(db: *mut fastkv_db_t, read_only: bool, txn: *mut *mut fastkv_txn_t) -> fastkv_err_t;
     pub fn fastkv_txn_get(txn: *mut fastkv_txn_t, key: fastkv_slice_t, value_out: *mut fastkv_slice_t) -> fastkv_err_t;
     pub fn fastkv_txn_put(txn: *mut fastkv_txn_t, key: fastkv_slice_t, value: fastkv_slice_t) -> fastkv_err_t;
@@ -113,7 +113,7 @@ unsafe extern "C" {
     pub fn fastkv_cursor_value(cursor: *mut fastkv_cursor_t, value_out: *mut fastkv_slice_t) -> fastkv_err_t;
     pub fn fastkv_cursor_close(cursor: *mut fastkv_cursor_t);
 
-    /* index sekunder */
+    /* secondary index */
     pub fn fastkv_index_create(
         db: *mut fastkv_db_t, name: *const c_char,
         fn_: fastkv_index_fn, udata: *mut c_void,

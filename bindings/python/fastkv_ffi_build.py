@@ -1,7 +1,7 @@
 """
-Script build CFFI untuk FastKV.
-Jalankan: python fastkv_ffi_build.py
-Atau otomatis lewat setup.py.
+Script build CFFI for FastKV.
+Run: python fastkv_ffi_build.py
+Or automatically via setup.py.
 """
 
 import os
@@ -29,7 +29,7 @@ ffi.cdef("""
 
     const char *fastkv_strerror(fastkv_err_t err);
 
-    /* tipe opaque */
+    /* opaque types */
     typedef struct fastkv_db     fastkv_db_t;
     typedef struct fastkv_txn    fastkv_txn_t;
     typedef struct fastkv_cursor fastkv_cursor_t;
@@ -41,7 +41,7 @@ ffi.cdef("""
         size_t         len;
     } fastkv_slice_t;
 
-    /* opsi buka database */
+    /* database options */
     typedef struct {
         const char *path;
         size_t      map_size;
@@ -52,7 +52,7 @@ ffi.cdef("""
         void        (*free_fn)(void *);
     } fastkv_opts_t;
 
-    /* arah cursor */
+    /* cursor direction */
     typedef enum {
         FASTKV_CURSOR_FORWARD  = 0,
         FASTKV_CURSOR_BACKWARD = 1,
@@ -82,7 +82,7 @@ ffi.cdef("""
     fastkv_err_t fastkv_close(fastkv_db_t *db);
     fastkv_err_t fastkv_sync(fastkv_db_t *db);
 
-    /* operasi dasar */
+    /* basic operations */
     fastkv_err_t fastkv_get(fastkv_db_t *db, fastkv_slice_t key,
                             fastkv_slice_t *value_out);
     fastkv_err_t fastkv_put(fastkv_db_t *db, fastkv_slice_t key,
@@ -94,7 +94,7 @@ ffi.cdef("""
     fastkv_err_t fastkv_put_ttl(fastkv_db_t *db, fastkv_slice_t key,
                                 fastkv_slice_t value, uint64_t ttl_ms);
 
-    /* transaksi */
+    /* transactions */
     fastkv_err_t fastkv_txn_begin(fastkv_db_t *db, bool read_only,
                                   fastkv_txn_t **txn);
     fastkv_err_t fastkv_txn_get(fastkv_txn_t *txn, fastkv_slice_t key,
@@ -118,7 +118,7 @@ ffi.cdef("""
                                      fastkv_slice_t *value_out);
     void         fastkv_cursor_close(fastkv_cursor_t *cursor);
 
-    /* index sekunder */
+    /* secondary index */
     fastkv_err_t fastkv_index_create(fastkv_db_t *db, const char *name,
                                      fastkv_index_fn fn, void *udata,
                                      fastkv_index_t **index);

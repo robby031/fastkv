@@ -1,13 +1,13 @@
-//! FastKV Rust binding — antarmuka aman (safe) di atas C FFI.
+//! FastKV Rust binding — safe interface over C FFI.
 //!
-//! # Contoh
+//! # Example
 //! ```no_run
 //! use fastkv::{DB, Opts};
 //!
 //! let db = DB::open("/tmp/mydb", Opts::default()).unwrap();
-//! db.put(b"kunci", b"nilai").unwrap();
-//! let val = db.get(b"kunci").unwrap();
-//! assert_eq!(val, b"nilai");
+//! db.put(b"key", b"val").unwrap();
+//! let val = db.get(b"key").unwrap();
+//! assert_eq!(val, b"val");
 //! ```
 
 mod ffi;
@@ -30,10 +30,10 @@ mod error {
     impl std::fmt::Display for Error {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match self {
-                Error::NotFound => write!(f, "kunci tidak ditemukan"),
-                Error::Conflict => write!(f, "konflik transaksi write-write"),
-                Error::ReadOnly => write!(f, "write pada transaksi read-only"),
-                Error::CursorEOF => write!(f, "cursor sudah habis"),
+                Error::NotFound => write!(f, "key not found"),
+                Error::Conflict => write!(f, "write-write transaction conflict"),
+                Error::ReadOnly => write!(f, "write on read-only transaction"),
+                Error::CursorEOF => write!(f, "cursor already exhausted"),
                 Error::Other(_, msg) => write!(f, "{}", msg),
             }
         }
@@ -81,7 +81,7 @@ fn from_slice(s: &ffi::fastkv_slice_t) -> Vec<u8> {
     unsafe { std::slice::from_raw_parts(s.data, s.len).to_vec() }
 }
 
-/// Opsi pembukaan database.
+/// Db opening options.
 pub struct Opts {
     pub map_size: usize,
     pub arena_size: usize,
@@ -100,8 +100,8 @@ impl Default for Opts {
     }
 }
 
-/// Handle utama database FastKV.
-/// Aman dikirim antar thread (`Send + Sync`).
+/// Main handle db FastKV.
+/// Safe to send between threads (`Send + Sync`).
 pub struct DB {
     ptr: *mut ffi::fastkv_db_t,
 }
@@ -110,10 +110,10 @@ unsafe impl Send for DB {}
 unsafe impl Sync for DB {}
 
 impl DB {
-    /// Buka atau buat database di path yang diberikan.
+    /// Open or create a database at the given path.
     pub fn open(path: &str, opts: Opts) -> Result<Self> {
         use std::ffi::CString;
-        let cpath = CString::new(path).expect("path tidak valid");
+        let cpath = CString::new(path).expect("invalid path");
 
         let copts = ffi::fastkv_opts_t {
             path: cpath.as_ptr(),
@@ -130,7 +130,7 @@ impl DB {
         Ok(DB { ptr })
     }
 
-    /// Baca nilai untuk kunci yang diberikan.
+    /// Read the value for the given key.
     pub fn get(&self, key: &[u8]) -> Result<Vec<u8>> {
         let mut s = ffi::fastkv_slice_t { data: std::ptr::null(), len: 0 };
         error::check(unsafe { ffi::fastkv_get(self.ptr, to_slice(key), &mut s) })?;
@@ -139,29 +139,29 @@ impl DB {
         Ok(val)
     }
 
-    /// Simpan pasangan kunci-nilai.
+    /// Store a key-value pair.
     pub fn put(&self, key: &[u8], value: &[u8]) -> Result<()> {
         error::check(unsafe { ffi::fastkv_put(self.ptr, to_slice(key), to_slice(value)) })
     }
 
-    /// Simpan kunci dengan TTL dalam milidetik.
+    /// Store a key with a TTL in milliseconds.
     pub fn put_ttl(&self, key: &[u8], value: &[u8], ttl_ms: u64) -> Result<()> {
         error::check(unsafe {
             ffi::fastkv_put_ttl(self.ptr, to_slice(key), to_slice(value), ttl_ms)
         })
     }
 
-    /// Hapus kunci dari database.
+    /// Delete a key from the database.
     pub fn delete(&self, key: &[u8]) -> Result<()> {
         error::check(unsafe { ffi::fastkv_delete(self.ptr, to_slice(key)) })
     }
 
-    /// Flush WAL dan jalankan checkpoint.
+    /// Flush WAL and run checkpoint.
     pub fn sync(&self) -> Result<()> {
         error::check(unsafe { ffi::fastkv_sync(self.ptr) })
     }
 
-    /// Kembalikan statistik operasional.
+    /// Return operational statistics.
     pub fn stats(&self) -> Result<Stats> {
         let mut s = ffi::fastkv_stats_t {
             num_keys: 0,
@@ -184,18 +184,18 @@ impl DB {
         })
     }
 
-    /// Mulai transaksi baru.
+    /// Start a new transaction.
     pub fn begin(&self, read_only: bool) -> Result<Txn<'_>> {
         let mut ptr = std::ptr::null_mut();
         error::check(unsafe { ffi::fastkv_txn_begin(self.ptr, read_only, &mut ptr) })?;
         Ok(Txn { db: self, ptr, done: false })
     }
 
-    /// Buat index sekunder berbasis field JSON.
+    /// Create a secondary index based on a JSON field.
     pub fn json_index<'a>(&'a self, name: &str, field: &str) -> Result<Index<'a>> {
         use std::ffi::CString;
-        let cname = CString::new(name).unwrap();
-        let cfield = CString::new(field).unwrap();
+        let cname = CString::new(name).expect("invalid name");
+        let cfield = CString::new(field).expect("invalid field");
         let mut ptr = std::ptr::null_mut();
         error::check(unsafe {
             ffi::fastkv_json_index_create(self.ptr, cname.as_ptr(), cfield.as_ptr(), &mut ptr)
@@ -203,10 +203,10 @@ impl DB {
         Ok(Index { db: self, ptr, name: name.to_owned() })
     }
 
-    /// Hapus index dengan nama yang diberikan.
+    /// Drop the index with the given name.
     pub fn drop_index(&self, name: &str) -> Result<()> {
         use std::ffi::CString;
-        let cname = CString::new(name).unwrap();
+        let cname = CString::new(name).expect("invalid name");
         error::check(unsafe { ffi::fastkv_index_drop(self.ptr, cname.as_ptr()) })
     }
 }
@@ -219,7 +219,7 @@ impl Drop for DB {
     }
 }
 
-/// Statistik operasional database.
+/// Operational statistics of the database.
 #[derive(Debug, Clone)]
 pub struct Stats {
     pub num_keys: u64,
@@ -231,7 +231,7 @@ pub struct Stats {
     pub arena_alloc_bytes: u64,
 }
 
-/// Transaksi eksplisit FastKV.
+/// Explicit FastKV transaction.
 pub struct Txn<'db> {
     db: &'db DB,
     ptr: *mut ffi::fastkv_txn_t,
@@ -239,30 +239,30 @@ pub struct Txn<'db> {
 }
 
 impl<'db> Txn<'db> {
-    /// Baca kunci dalam transaksi ini.
+    /// Read a key within this transaction.
     pub fn get(&self, key: &[u8]) -> Result<Vec<u8>> {
         let mut s = ffi::fastkv_slice_t { data: std::ptr::null(), len: 0 };
         error::check(unsafe { ffi::fastkv_txn_get(self.ptr, to_slice(key), &mut s) })?;
         Ok(from_slice(&s))
     }
 
-    /// Simpan kunci-nilai dalam transaksi ini.
+    /// Store a key-value pair within this transaction.
     pub fn put(&self, key: &[u8], value: &[u8]) -> Result<()> {
         error::check(unsafe { ffi::fastkv_txn_put(self.ptr, to_slice(key), to_slice(value)) })
     }
 
-    /// Hapus kunci dalam transaksi ini.
+    /// Delete a key within this transaction.
     pub fn delete(&self, key: &[u8]) -> Result<()> {
         error::check(unsafe { ffi::fastkv_txn_delete(self.ptr, to_slice(key)) })
     }
 
-    /// Commit transaksi.
+    /// Commit the transaction.
     pub fn commit(mut self) -> Result<()> {
         self.done = true;
         error::check(unsafe { ffi::fastkv_txn_commit(self.ptr) })
     }
 
-    /// Buka cursor pada transaksi ini.
+    /// Open a cursor on this transaction.
     pub fn cursor(&self, forward: bool) -> Result<Cursor<'_>> {
         use ffi::fastkv_cursor_dir_t::*;
         let dir = if forward { FASTKV_CURSOR_FORWARD } else { FASTKV_CURSOR_BACKWARD };
@@ -280,7 +280,7 @@ impl Drop for Txn<'_> {
     }
 }
 
-/// Cursor berurutan atas snapshot B+tree.
+/// Sequential cursor over a B+tree snapshot.
 pub struct Cursor<'txn> {
     ptr: *mut ffi::fastkv_cursor_t,
     exhausted: bool,
@@ -288,26 +288,26 @@ pub struct Cursor<'txn> {
 }
 
 impl<'txn> Cursor<'txn> {
-    /// Posisikan cursor ke kunci >= key.
+    /// Position the cursor at the key >= given key.
     pub fn seek(&mut self, key: &[u8]) -> Result<()> {
         error::check(unsafe { ffi::fastkv_cursor_seek(self.ptr, to_slice(key)) })
     }
 
-    /// Kunci pada posisi saat ini.
+    /// Key at the current position.
     pub fn key(&self) -> Result<Vec<u8>> {
         let mut s = ffi::fastkv_slice_t { data: std::ptr::null(), len: 0 };
         error::check(unsafe { ffi::fastkv_cursor_key(self.ptr, &mut s) })?;
         Ok(from_slice(&s))
     }
 
-    /// Nilai pada posisi saat ini.
+    /// Value at the current position.
     pub fn value(&self) -> Result<Vec<u8>> {
         let mut s = ffi::fastkv_slice_t { data: std::ptr::null(), len: 0 };
         error::check(unsafe { ffi::fastkv_cursor_value(self.ptr, &mut s) })?;
         Ok(from_slice(&s))
     }
 
-    /// Maju ke entri berikutnya. Kembalikan false jika sudah habis.
+    /// Move to the next entry. Return false if exhausted.
     pub fn next(&mut self) -> Result<bool> {
         if self.exhausted {
             return Ok(false);
@@ -321,7 +321,7 @@ impl<'txn> Cursor<'txn> {
         Ok(true)
     }
 
-    /// Iterator atas pasangan (kunci, nilai).
+    /// Iterator over (key, value) pairs.
     pub fn iter(&mut self) -> CursorIter<'_, 'txn> {
         CursorIter { cursor: self, first: true }
     }
@@ -335,7 +335,7 @@ impl Drop for Cursor<'_> {
     }
 }
 
-/// Iterator yang menghasilkan (kunci, nilai) dari cursor.
+/// Iterator over (key, value) pairs from a cursor.
 pub struct CursorIter<'c, 'txn> {
     cursor: &'c mut Cursor<'txn>,
     first: bool,
@@ -366,7 +366,7 @@ impl<'c, 'txn> Iterator for CursorIter<'c, 'txn> {
     }
 }
 
-/// Handle index sekunder FastKV.
+/// Handle secondary index in FastKV.
 pub struct Index<'db> {
     db: &'db DB,
     ptr: *mut ffi::fastkv_index_t,
@@ -374,7 +374,7 @@ pub struct Index<'db> {
 }
 
 impl<'db> Index<'db> {
-    /// Cari semua primary key yang cocok dengan index_key.
+    /// Find all primary keys matching the given index_key.
     pub fn lookup(&self, index_key: &[u8]) -> Result<Vec<Vec<u8>>> {
         let mut hasil: Vec<Vec<u8>> = Vec::new();
         let hasil_ptr = &mut hasil as *mut Vec<Vec<u8>> as *mut std::ffi::c_void;
@@ -395,7 +395,7 @@ impl<'db> Index<'db> {
         Ok(hasil)
     }
 
-    /// Cari semua primary key dalam rentang index [min_key, max_key].
+    /// Find all primary keys within the index range [min_key, max_key].
     pub fn range(&self, min_key: &[u8], max_key: &[u8]) -> Result<Vec<Vec<u8>>> {
         let mut hasil: Vec<Vec<u8>> = Vec::new();
         let hasil_ptr = &mut hasil as *mut Vec<Vec<u8>> as *mut std::ffi::c_void;
@@ -425,8 +425,8 @@ impl<'db> Index<'db> {
 
 impl Drop for Index<'_> {
     fn drop(&mut self) {
-        // index tidak perlu di-destroy secara eksplisit — drop_index mengurus ini
-        // kita biarkan db._ptr yang mengelola lifetime index
+        // The index does not need to be explicitly destroyed — drop_index handles this
+        // We let db._ptr manage the lifetime of the index
         let _ = &self.db;
         let _ = &self.name;
     }
@@ -441,7 +441,7 @@ mod tests {
         fs::create_dir_all(path).unwrap();
         let mut opts = Opts::default();
         opts.sync_writes = false;
-        DB::open(path, opts).expect("gagal buka DB")
+        DB::open(path, opts).expect("failed to open database")
     }
 
     fn cleanup(path: &str) {
@@ -463,7 +463,7 @@ mod tests {
         let path = "/tmp/fastkv_rust_test_not_found";
         cleanup(path);
         let db = open_db(path);
-        assert_eq!(db.get(b"tidak_ada").unwrap_err(), Error::NotFound);
+        assert_eq!(db.get(b"not_found").unwrap_err(), Error::NotFound);
         cleanup(path);
     }
 
@@ -499,12 +499,12 @@ mod tests {
         let path = "/tmp/fastkv_rust_test_rollback";
         cleanup(path);
         let db = open_db(path);
-        db.put(b"stabil", b"ya").unwrap();
+        db.put(b"stable", b"value").unwrap();
         {
             let _txn = db.begin(false).unwrap();
-            // txn dropped tanpa commit → rollback otomatis
+            // txn dropped w/o commit -> rollback
         }
-        assert_eq!(db.get(b"stabil").unwrap(), b"ya");
+        assert_eq!(db.get(b"stable").unwrap(), b"value");
         cleanup(path);
     }
 
@@ -514,13 +514,13 @@ mod tests {
         cleanup(path);
         let db = open_db(path);
         for i in 0..5u8 {
-            db.put(format!("k{:02}", i).as_bytes(), b"v").unwrap();
+            db.put(format!("k{:02}", i).as_bytes(), b"value").unwrap();
         }
         let txn = db.begin(true).unwrap();
         let mut cur = txn.cursor(true).unwrap();
         let items: Vec<_> = cur.iter().collect();
         assert_eq!(items.len(), 5);
-        // pastikan urutan naik
+        // Ensure the order is ascending
         let keys: Vec<Vec<u8>> = items.into_iter().map(|r| r.unwrap().0).collect();
         let mut sorted = keys.clone();
         sorted.sort();
@@ -535,9 +535,9 @@ mod tests {
         let db = open_db(path);
         let idx = db.json_index("by_role", "role").unwrap();
 
-        db.put(b"u:1", br#"{"role":"admin","name":"ali"}"#).unwrap();
-        db.put(b"u:2", br#"{"role":"user","name":"budi"}"#).unwrap();
-        db.put(b"u:3", br#"{"role":"admin","name":"citra"}"#).unwrap();
+        db.put(b"u:1", br#"{"role":"admin","name":"robby"}"#).unwrap();
+        db.put(b"u:2", br#"{"role":"user","name":"eka"}"#).unwrap();
+        db.put(b"u:3", br#"{"role":"admin","name":"arman"}"#).unwrap();
 
         let hasil = idx.lookup(b"admin").unwrap();
         assert_eq!(hasil.len(), 2);
@@ -563,8 +563,8 @@ mod tests {
         let path = "/tmp/fastkv_rust_test_ttl";
         cleanup(path);
         let db = open_db(path);
-        db.put_ttl(b"ttl", b"isi", 10_000).unwrap();
-        assert_eq!(db.get(b"ttl").unwrap(), b"isi");
+        db.put_ttl(b"ttl", b"value", 10_000).unwrap();
+        assert_eq!(db.get(b"ttl").unwrap(), b"value");
         cleanup(path);
     }
 }

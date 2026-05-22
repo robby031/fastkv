@@ -56,15 +56,31 @@ fastkv_err_t fastkv_cursor_key(fastkv_cursor_t *cursor, fastkv_slice_t *key_out)
 fastkv_err_t fastkv_cursor_value(fastkv_cursor_t *cursor, fastkv_slice_t *value_out);
 void         fastkv_cursor_close(fastkv_cursor_t *cursor);
 
-/* Secondary index API   */
-
-typedef int (*fastkv_index_fn)(
-    fastkv_slice_t key, fastkv_slice_t value, fastkv_slice_t *index_key_out, void *udata);
+/* Secondary index API */
 
 fastkv_err_t fastkv_index_create(
     fastkv_db_t *db, const char *name, fastkv_index_fn fn, void *udata, fastkv_index_t **index);
 
 fastkv_err_t fastkv_index_drop(fastkv_db_t *db, const char *name);
+
+fastkv_err_t fastkv_index_lookup(
+    fastkv_index_t *index, fastkv_slice_t index_key,
+    fastkv_index_scan_cb cb, void *udata);
+
+fastkv_err_t fastkv_index_range(
+    fastkv_index_t *index, fastkv_slice_t min_index_key, fastkv_slice_t max_index_key,
+    fastkv_index_scan_cb cb, void *udata);
+
+/* JSON index — buat index berdasarkan field dalam nilai JSON */
+fastkv_err_t fastkv_json_index_create(
+    fastkv_db_t *db, const char *index_name, const char *json_field,
+    fastkv_index_t **index);
+
+/* TTL API */
+
+/* seperti fastkv_put tapi kunci otomatis dihapus setelah ttl_ms milidetik */
+fastkv_err_t fastkv_put_ttl(
+    fastkv_db_t *db, fastkv_slice_t key, fastkv_slice_t value, uint64_t ttl_ms);
 
 /* Stats   */
 

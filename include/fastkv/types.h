@@ -1,6 +1,8 @@
 #ifndef FASTKV_TYPES_H
 #define FASTKV_TYPES_H
 
+#include "error.h"
+
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -61,5 +63,13 @@ typedef uint64_t fastkv_ts_t;
 /* Key/value size limits */
 #define FASTKV_MAX_KEY_LEN (4u * 1024u)          /* 4 KiB */
 #define FASTKV_MAX_VAL_LEN (64u * 1024u * 1024u) /* 64 MiB */
+
+/* callback secondary index — isi *index_key_out lalu kembalikan 0 untuk
+ * memasukkan ke index, atau non-0 untuk skip entry ini */
+typedef int (*fastkv_index_fn)(
+    fastkv_slice_t key, fastkv_slice_t value, fastkv_slice_t *index_key_out, void *udata);
+
+/* callback hasil pencarian index */
+typedef fastkv_err_t (*fastkv_index_scan_cb)(fastkv_slice_t primary_key, void *udata);
 
 #endif /* FASTKV_TYPES_H */

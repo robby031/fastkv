@@ -43,9 +43,13 @@ add_fastkv_test(test_btree      unit/test_btree.c)
 add_fastkv_test(test_rtree      unit/test_rtree.c)
 add_fastkv_test(test_cursor     unit/test_cursor.c)
 
-# Integration tests  
-add_fastkv_test(test_crud           integration/test_crud.c)
-add_fastkv_test(test_crash_recovery integration/test_crash_recovery.c)
+# Integration tests
+add_fastkv_test(test_crud               integration/test_crud.c)
+add_fastkv_test(test_crash_recovery     integration/test_crash_recovery.c)
+add_fastkv_test(test_secondary_index    integration/test_secondary_index.c)
+add_fastkv_test(test_json_index         integration/test_json_index.c)
+add_fastkv_test(test_ttl                integration/test_ttl.c)
+add_fastkv_test(test_stress             integration/test_stress.c)
 
 # Fuzz targets (clang only)  
 if(FASTKV_BUILD_FUZZ)

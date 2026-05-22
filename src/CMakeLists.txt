@@ -27,6 +27,11 @@ add_library(fastkv STATIC
     # index
     index/btree/btree.c
     index/rtree/rtree.c
+    index/secondary.c
+    index/json_index.c
+
+    # ttl
+    persist/ttl.c
 
     # api
     api/kv_api.c

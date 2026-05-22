@@ -3,6 +3,7 @@
 #include "api/kv_api.h"
 #include "snapshot.h"
 #include "storage/hashtable/ht.h"
+#include "ttl.h"
 #include "util/log.h"
 #include "wal/wal.h"
 
@@ -47,7 +48,10 @@ fastkv_err_t fastkv_checkpoint(struct fastkv_db *db) {
     /* 6. Trim old snapshots — keep only the most recent */
     fastkv_snapshot_trim(db->opts.path, ckpt_ts);
 
-    /* 7. MVCC GC — free versions invisible to all active transactions */
+    /* 7. hapus kunci yang sudah TTL expired */
+    fastkv_ttl_expire(db);
+
+    /* 8. MVCC GC — free versions invisible to all active transactions */
     fastkv_ts_t min_active = fastkv_oracle_min_active(&db->txn_mgr.oracle);
     uint64_t    freed      = fastkv_ht_gc(db->ht, min_active);
 

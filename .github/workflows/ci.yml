@@ -132,7 +132,7 @@ jobs:
 
       - name: Build CFFI extension
         working-directory: bindings/python
-        run: python3 fastkv_ffi_build.py
+        run: python3 fastkv_ffi_build.py 2>&1
 
       - name: Run Python tests
         working-directory: bindings/python

@@ -540,7 +540,7 @@ fastkv_err_t fastkv_rtree_insert(fastkv_rtree_t *t, fastkv_rect_t rect, fastkv_s
         return FASTKV_ERR_NOMEM;
     memcpy(kdata, key.data, key.len);
 
-    rentry_t e;
+    rentry_t e = {0};
     for (int i = 0; i < t->ndims; i++) {
         e.min[i] = rect.min[i];
         e.max[i] = rect.max[i];

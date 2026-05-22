@@ -39,11 +39,12 @@ void fastkv__log(fastkv_log_level_t level, const char *file, int line, const cha
     fprintf(
         out, "%s.%03ld [%s] %s:%d  ", timebuf, ts.tv_nsec / 1000000L, level_str[level], file, line);
 
-    va_list ap;
-    va_start(ap, fmt);
-    if (fmt)
+    if (fmt) {
+        va_list ap;
+        va_start(ap, fmt);
         vfprintf(out, fmt, ap);
-    va_end(ap);
+        va_end(ap);
+    }
 
     fputc('\n', out);
     fflush(out);

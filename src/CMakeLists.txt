@@ -44,6 +44,7 @@ target_include_directories(fastkv
 )
 
 target_compile_definitions(fastkv PRIVATE _POSIX_C_SOURCE=200809L)
+set_target_properties(fastkv PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 target_link_libraries(fastkv
     PUBLIC  fastkv_compiler_flags

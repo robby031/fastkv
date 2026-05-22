@@ -361,8 +361,10 @@ fastkv_err_t fastkv_wal_replay(const char *dir, fastkv_ts_t since_ts, fastkv_wal
     if (rc != FASTKV_OK)
         return rc;
 
-    if (count == 0)
+    if (count == 0) {
+        fkv_free(ids);
         return FASTKV_OK;
+    }
 
     fastkv_ts_t max_ts = since_ts;
     uint64_t    total  = 0;

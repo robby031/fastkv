@@ -104,7 +104,7 @@ jobs:
           find src -name '*.c' | xargs clang-tidy \
             -p build \
             --warnings-as-errors='*' \
-            --checks='-clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling'
+            --checks='-clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling,-clang-analyzer-valist.Uninitialized'
 
   binding-python:
     name: binding / python

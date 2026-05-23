@@ -8,11 +8,11 @@
 #include "util/crc32.h"
 #include "util/log.h"
 
-#include <stdatomic.h>
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
+#include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -300,7 +300,7 @@ fastkv_err_t fastkv_snapshot_load(const char *dir, struct fastkv_db *db, fastkv_
 bad:
     fastkv_io_munmap(map_addr, file_size);
     fastkv_io_close(io);
-    LOG_ERROR("snapshot: galat saat membaca data dari file %s", path);
+    LOG_ERROR("snapshot: error saat membaca data dari file %s", path);
     return FASTKV_ERR_CORRUPT;
 }
 

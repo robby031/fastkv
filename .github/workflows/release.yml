@@ -155,7 +155,7 @@ jobs:
         run: |
           VERSION="${GITHUB_REF_NAME}"
           PREV=$(git tag --sort=-version:refname | grep -v "^${VERSION}$" | head -1)
-          echo "## Perubahan sejak ${PREV:-awal}" > CHANGELOG_FRAGMENT.md
+          echo "## Changes since ${PREV:-initial}" > CHANGELOG_FRAGMENT.md
           if [ -n "$PREV" ]; then
             git log "${PREV}..HEAD" --pretty=format:"- %s (%h)" >> CHANGELOG_FRAGMENT.md
           else
@@ -163,11 +163,11 @@ jobs:
           fi
           echo "" >> CHANGELOG_FRAGMENT.md
           echo "" >> CHANGELOG_FRAGMENT.md
-          echo "## Cara instalasi" >> CHANGELOG_FRAGMENT.md
+          echo "## How to install" >> CHANGELOG_FRAGMENT.md
           echo "" >> CHANGELOG_FRAGMENT.md
-          echo "**C/C++ — download arsip binary:**" >> CHANGELOG_FRAGMENT.md
+          echo "**C/C++ — download binary archive:**" >> CHANGELOG_FRAGMENT.md
           echo '```' >> CHANGELOG_FRAGMENT.md
-          echo "# Ekstrak header + libfastkv.a lalu link:" >> CHANGELOG_FRAGMENT.md
+          echo "# Extract header + libfastkv.a then link:" >> CHANGELOG_FRAGMENT.md
           echo "# -I<path>/include  -L<path>/lib  -lfastkv  -lpthread  -lm" >> CHANGELOG_FRAGMENT.md
           echo '```' >> CHANGELOG_FRAGMENT.md
           echo "" >> CHANGELOG_FRAGMENT.md
@@ -178,12 +178,12 @@ jobs:
           echo "" >> CHANGELOG_FRAGMENT.md
           echo "**Go:**" >> CHANGELOG_FRAGMENT.md
           echo '```' >> CHANGELOG_FRAGMENT.md
-          echo "go get github.com/bagusdwiharianto/fastkv@${VERSION}" >> CHANGELOG_FRAGMENT.md
+          echo "go get github.com/robby031/fastkv@${VERSION}" >> CHANGELOG_FRAGMENT.md
           echo '```' >> CHANGELOG_FRAGMENT.md
           echo "" >> CHANGELOG_FRAGMENT.md
           echo "**Rust:**" >> CHANGELOG_FRAGMENT.md
           echo '```' >> CHANGELOG_FRAGMENT.md
-          echo 'fastkv = { git = "https://github.com/bagusdwiharianto/fastkv", tag = "'${VERSION}'" }' >> CHANGELOG_FRAGMENT.md
+          echo 'fastkv = { git = "https://github.com/robby031/fastkv", tag = "'${VERSION}'" }' >> CHANGELOG_FRAGMENT.md
           echo '```' >> CHANGELOG_FRAGMENT.md
 
       - name: Create GitHub Release

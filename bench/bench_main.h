@@ -3,8 +3,8 @@
 
 #include "fastkv.h"
 
-#include <stdint.h>
 #include <stddef.h>
+#include <stdint.h>
 
 /* key space yang di-warmup; semua benchmark write wrap di sini
  * supaya tidak terus menambah version nodes baru tak terbatas */
@@ -32,12 +32,11 @@ void          bench_hist_free(bench_hist_t *h);
 
 /* laporan */
 void bench_print_header(void);
-void bench_print_row(const char *name, uint64_t ops, uint64_t elapsed_ns,
-                     bench_hist_t *hist);
+void bench_print_row(const char *name, uint64_t ops, uint64_t elapsed_ns, bench_hist_t *hist);
 void bench_print_footer(void);
 
 /* KPI check */
-void bench_kpi_check(const char *name, double actual, double target,
-                     const char *unit, int higher_is_better);
+void bench_kpi_check(
+    const char *name, double actual, double target, const char *unit, int higher_is_better);
 
 #endif

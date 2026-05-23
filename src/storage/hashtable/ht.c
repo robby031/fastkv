@@ -99,8 +99,8 @@ static fastkv_err_t ht_insert_version(fastkv_ht_t *ht, fastkv_ts_t commit_ts, fa
 
     nv->begin_ts = commit_ts;
     atomic_init(&nv->end_ts, FASTKV_TS_MAX);
-    nv->key      = slice_dup(key);
-    nv->value    = value.data ? slice_dup(value) : FASTKV_SLICE_NULL;
+    nv->key   = slice_dup(key);
+    nv->value = value.data ? slice_dup(value) : FASTKV_SLICE_NULL;
 
     if ((nv->key.data == NULL && key.len > 0) ||
         (value.data && nv->value.data == NULL && value.len > 0)) {

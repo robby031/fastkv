@@ -24,7 +24,7 @@ struct fastkv_db {
     pthread_rwlock_t index_lock;
 
     /* serialize commit: conflict check + timestamp + apply harus atomik */
-    pthread_mutex_t  commit_lock;
+    pthread_mutex_t commit_lock;
 
     fastkv_btree_t *ttl_exp; /* expiry_be + pk -> "" */
     fastkv_btree_t *ttl_key; /* pk -> expiry_be */

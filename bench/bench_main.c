@@ -12,10 +12,10 @@
 #include <string.h>
 #include <time.h>
 
-#define BENCH_OPS      5000000
+#define BENCH_OPS 5000000
 #define BENCH_OPS_CONC 10000000
-#define WARMUP_KEYS    BENCH_KEY_SPACE  /* warmup = key space yang dipakai semua bench */
-#define CONC_THREADS   16
+#define WARMUP_KEYS BENCH_KEY_SPACE /* warmup = key space yang dipakai semua bench */
+#define CONC_THREADS 4
 
 static fastkv_db_t *g_db;
 

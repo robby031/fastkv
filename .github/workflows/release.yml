@@ -131,10 +131,37 @@ jobs:
           path: bindings/python/dist/*.whl
           retention-days: 1
 
+  tag-go-binding:
+    name: tag go binding
+    runs-on: ubuntu-24.04
+    needs: [build-artifacts, build-python-wheel]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Go sub-module butuh tag dengan prefix path-nya sendiri supaya
+      # `go get github.com/robby031/fastkv/bindings/golang@vX.Y.Z` bisa resolve.
+      # Tag ini dibuat otomatis sinkron dengan root release tag.
+      - name: Push bindings/golang tag
+        run: |
+          VERSION="${GITHUB_REF_NAME}"
+          GO_TAG="bindings/golang/${VERSION}"
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          # skip kalau tag sudah ada (idempotent)
+          if git rev-parse "${GO_TAG}" >/dev/null 2>&1; then
+            echo "Tag ${GO_TAG} already exists, skipping"
+          else
+            git tag "${GO_TAG}"
+            git push origin "${GO_TAG}"
+            echo "Created tag ${GO_TAG}"
+          fi
+
   create-release:
     name: create release
     runs-on: ubuntu-24.04
-    needs: [build-artifacts, build-python-wheel]
+    needs: [build-artifacts, build-python-wheel, tag-go-binding]
 
     steps:
       - uses: actions/checkout@v4
@@ -154,7 +181,7 @@ jobs:
         id: changelog
         run: |
           VERSION="${GITHUB_REF_NAME}"
-          PREV=$(git tag --sort=-version:refname | grep -v "^${VERSION}$" | head -1)
+          PREV=$(git tag --sort=-version:refname | grep "^v" | grep -v "^${VERSION}$" | head -1)
           echo "## Changes since ${PREV:-initial}" > CHANGELOG_FRAGMENT.md
           if [ -n "$PREV" ]; then
             git log "${PREV}..HEAD" --pretty=format:"- %s (%h)" >> CHANGELOG_FRAGMENT.md
@@ -176,7 +203,7 @@ jobs:
           echo "pip install fastkv-${VERSION}-*.whl" >> CHANGELOG_FRAGMENT.md
           echo '```' >> CHANGELOG_FRAGMENT.md
           echo "" >> CHANGELOG_FRAGMENT.md
-          echo "**Go:**" >> CHANGELOG_FRAGMENT.md
+          echo "**Go** (membutuhkan fastkv C library ter-install, lihat README):" >> CHANGELOG_FRAGMENT.md
           echo '```' >> CHANGELOG_FRAGMENT.md
           echo "go get github.com/robby031/fastkv/bindings/golang@${VERSION}" >> CHANGELOG_FRAGMENT.md
           echo '```' >> CHANGELOG_FRAGMENT.md

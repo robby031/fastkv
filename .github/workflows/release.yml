@@ -178,12 +178,12 @@ jobs:
           echo "" >> CHANGELOG_FRAGMENT.md
           echo "**Go:**" >> CHANGELOG_FRAGMENT.md
           echo '```' >> CHANGELOG_FRAGMENT.md
-          echo "go get github.com/robby031/fastkv@${VERSION}" >> CHANGELOG_FRAGMENT.md
+          echo "go get github.com/robby031/fastkv/bindings/golang@${VERSION}" >> CHANGELOG_FRAGMENT.md
           echo '```' >> CHANGELOG_FRAGMENT.md
           echo "" >> CHANGELOG_FRAGMENT.md
           echo "**Rust:**" >> CHANGELOG_FRAGMENT.md
           echo '```' >> CHANGELOG_FRAGMENT.md
-          echo 'fastkv = { git = "https://github.com/robby031/fastkv", tag = "'${VERSION}'" }' >> CHANGELOG_FRAGMENT.md
+          echo 'fastkv = { git = "https://github.com/robby031/fastkv/bindings/rust", tag = "'${VERSION}'" }' >> CHANGELOG_FRAGMENT.md
           echo '```' >> CHANGELOG_FRAGMENT.md
 
       - name: Create GitHub Release

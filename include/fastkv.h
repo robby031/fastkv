@@ -20,6 +20,8 @@ extern "C" {
 fastkv_err_t fastkv_open(fastkv_db_t **db, const fastkv_opts_t *opts);
 fastkv_err_t fastkv_close(fastkv_db_t *db);
 fastkv_err_t fastkv_sync(fastkv_db_t *db); /* explicit WAL flush + checkpoint */
+void         fastkv_compaction_pause(fastkv_db_t *db);  /* hentikan background GC */
+void         fastkv_compaction_resume(fastkv_db_t *db); /* hidupkan kembali background GC */
 
 /* Single-operation API (implicit auto-commit transactions)   */
 

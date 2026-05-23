@@ -23,8 +23,8 @@
 /* MVCC version node */
 typedef struct fastkv_version {
     struct fastkv_version *_Atomic next; /* next older version of same key */
-    fastkv_ts_t    begin_ts;
-    fastkv_ts_t    end_ts; /* FASTKV_TS_MAX == still live */
+    fastkv_ts_t          begin_ts;
+    _Atomic fastkv_ts_t  end_ts; /* FASTKV_TS_MAX == still live */
     fastkv_slice_t key;    /* owned copy */
     fastkv_slice_t value;  /* owned copy; .data==NULL → tombstone */
 } fastkv_version_t;

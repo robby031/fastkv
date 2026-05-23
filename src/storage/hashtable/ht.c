@@ -69,7 +69,7 @@ void fastkv_ht_destroy(fastkv_ht_t *ht) {
     fkv_free(ht);
 }
 
-/* Point read   */
+/* Point read */
 
 fastkv_err_t fastkv_ht_get(
     fastkv_ht_t *ht, fastkv_ts_t snapshot_ts, fastkv_slice_t key, fastkv_slice_t *value_out) {
@@ -77,7 +77,8 @@ fastkv_err_t fastkv_ht_get(
     fastkv_version_t *v   = atomic_load_explicit(&ht->buckets[idx], memory_order_acquire);
 
     while (v) {
-        if (slice_eq(v->key, key) && v->begin_ts <= snapshot_ts && snapshot_ts < v->end_ts) {
+        fastkv_ts_t end = atomic_load_explicit(&v->end_ts, memory_order_acquire);
+        if (slice_eq(v->key, key) && v->begin_ts <= snapshot_ts && snapshot_ts < end) {
             if (!v->value.data)
                 return FASTKV_ERR_NOTFOUND; /* tombstone */
             *value_out = v->value;
@@ -88,7 +89,7 @@ fastkv_err_t fastkv_ht_get(
     return FASTKV_ERR_NOTFOUND;
 }
 
-/* Point write (insert new version at chain head)   */
+/* Point write (insert new version at chain head) */
 
 static fastkv_err_t ht_insert_version(fastkv_ht_t *ht, fastkv_ts_t commit_ts, fastkv_slice_t key,
     fastkv_slice_t value /* NULL = tombstone */) {
@@ -97,7 +98,7 @@ static fastkv_err_t ht_insert_version(fastkv_ht_t *ht, fastkv_ts_t commit_ts, fa
         return FASTKV_ERR_NOMEM;
 
     nv->begin_ts = commit_ts;
-    nv->end_ts   = FASTKV_TS_MAX;
+    atomic_init(&nv->end_ts, FASTKV_TS_MAX);
     nv->key      = slice_dup(key);
     nv->value    = value.data ? slice_dup(value) : FASTKV_SLICE_NULL;
 
@@ -114,11 +115,12 @@ static fastkv_err_t ht_insert_version(fastkv_ht_t *ht, fastkv_ts_t commit_ts, fa
     do {
         old = atomic_load_explicit(&ht->buckets[idx], memory_order_acquire);
         atomic_store_explicit(&nv->next, old, memory_order_relaxed);
-        /* Seal the previous head version for the same key */
+        /* seal versi lama yang masih live untuk key yang sama */
         fastkv_version_t *prev = old;
         while (prev) {
-            if (slice_eq(prev->key, key) && prev->end_ts == FASTKV_TS_MAX) {
-                prev->end_ts = commit_ts;
+            fastkv_ts_t cur_end = atomic_load_explicit(&prev->end_ts, memory_order_acquire);
+            if (slice_eq(prev->key, key) && cur_end == FASTKV_TS_MAX) {
+                atomic_store_explicit(&prev->end_ts, commit_ts, memory_order_release);
                 break;
             }
             prev = atomic_load_explicit(&prev->next, memory_order_relaxed);
@@ -145,13 +147,13 @@ uint64_t fastkv_ht_gc(fastkv_ht_t *ht, fastkv_ts_t min_active_ts) {
     uint64_t freed = 0;
 
     for (size_t i = 0; i < ht->capacity; i++) {
-        /* We use a simple approach: rebuild the chain keeping live versions */
         fastkv_version_t *v    = atomic_load_explicit(&ht->buckets[i], memory_order_acquire);
         fastkv_version_t *keep = NULL;
 
         while (v) {
-            fastkv_version_t *next = atomic_load_explicit(&v->next, memory_order_relaxed);
-            if (v->end_ts < min_active_ts) {
+            fastkv_version_t *next  = atomic_load_explicit(&v->next, memory_order_relaxed);
+            fastkv_ts_t       v_end = atomic_load_explicit(&v->end_ts, memory_order_relaxed);
+            if (v_end < min_active_ts) {
                 fkv_free((void *)v->key.data);
                 if (v->value.data)
                     fkv_free((void *)v->value.data);

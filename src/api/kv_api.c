@@ -132,6 +132,7 @@ fastkv_err_t fastkv_open(fastkv_db_t **db_out, const fastkv_opts_t *opts) {
     }
 
     pthread_rwlock_init(&db->index_lock, NULL);
+    pthread_mutex_init(&db->commit_lock, NULL);
     atomic_init(&db->stat_num_keys, 0);
     atomic_init(&db->stat_snapshot_count, 0);
     atomic_init(&db->compact_stop, false);
@@ -185,6 +186,7 @@ fastkv_err_t fastkv_close(fastkv_db_t *db) {
 
     fastkv_txn_mgr_destroy(&db->txn_mgr);
     pthread_rwlock_destroy(&db->index_lock);
+    pthread_mutex_destroy(&db->commit_lock);
     free((void *)db->opts.path);
     fkv_free(db);
     LOG_INFO("fastkv closed");
@@ -195,6 +197,16 @@ fastkv_err_t fastkv_sync(fastkv_db_t *db) {
     if (!db)
         return FASTKV_ERR_INVAL;
     return fastkv_checkpoint(db);
+}
+
+void fastkv_compaction_pause(fastkv_db_t *db) {
+    if (db)
+        fastkv_compaction_stop(db);
+}
+
+void fastkv_compaction_resume(fastkv_db_t *db) {
+    if (db)
+        fastkv_compaction_start(db);
 }
 
 /* API single-op */
@@ -296,6 +308,14 @@ fastkv_err_t fastkv_txn_abort(fastkv_txn_t *txn) {
 }
 
 /* apply write-set — WAL, HT, dan B+tree */
+
+void fastkv_db_commit_lock(fastkv_db_t *db) {
+    pthread_mutex_lock(&db->commit_lock);
+}
+
+void fastkv_db_commit_unlock(fastkv_db_t *db) {
+    pthread_mutex_unlock(&db->commit_lock);
+}
 
 fastkv_err_t fastkv_db_apply_write_set(
     fastkv_db_t *db, fastkv_write_entry_t *head, fastkv_ts_t commit_ts) {

@@ -12,6 +12,8 @@ fastkv_err_t fastkv_db_apply_write_set(
     struct fastkv_db *db, fastkv_write_entry_t *head, fastkv_ts_t commit_ts);
 fastkv_err_t fastkv_db_check_conflicts(
     struct fastkv_db *db, fastkv_write_entry_t *head, fastkv_ts_t begin_ts);
+void fastkv_db_commit_lock(struct fastkv_db *db);
+void fastkv_db_commit_unlock(struct fastkv_db *db);
 
 /* Init / destroy */
 
@@ -65,20 +67,26 @@ fastkv_err_t fastkv_txn_mgr_commit(fastkv_txn_mgr_t *mgr, fastkv_txn_t *txn) {
     fastkv_err_t rc = FASTKV_OK;
 
     if (!txn->read_only && txn->write_head) {
+        fastkv_db_commit_lock(txn->db);
+
         /* 1. Write-write conflict detection */
         rc = fastkv_db_check_conflicts(txn->db, txn->write_head, txn->begin_ts);
         if (rc == FASTKV_ERR_TXN_CONFLICT) {
+            fastkv_db_commit_unlock(txn->db);
             atomic_fetch_add_explicit(&mgr->num_conflicts, 1, memory_order_relaxed);
             goto abort;
         }
-        if (rc != FASTKV_OK)
+        if (rc != FASTKV_OK) {
+            fastkv_db_commit_unlock(txn->db);
             goto abort;
+        }
 
         /* 2. Assign commit timestamp */
         txn->commit_ts = fastkv_oracle_commit(&mgr->oracle);
 
         /* 3. WAL + in-memory apply */
         rc = fastkv_db_apply_write_set(txn->db, txn->write_head, txn->commit_ts);
+        fastkv_db_commit_unlock(txn->db);
         if (rc != FASTKV_OK)
             goto abort;
     }

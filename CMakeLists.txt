@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.18)
-project(fastkv VERSION 0.1.3 LANGUAGES C)
+project(fastkv VERSION 0.1.4 LANGUAGES C)
 
 set(CMAKE_C_STANDARD 17)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -67,5 +67,5 @@ message(STATUS "  jemalloc    : ${FASTKV_USE_JEMALLOC}")
 message(STATUS "  io_uring    : ${FASTKV_USE_IOURING}")
 message(STATUS "  ASan        : ${FASTKV_ENABLE_ASAN}")
 message(STATUS "  TSan        : ${FASTKV_ENABLE_TSAN}")
-message(STATUS "
+message(STATUS "  UBSan       : ${FASTKV_ENABLE_UBSAN}")
 ##########################################")

@@ -38,7 +38,8 @@ void test_snapshot_write_load_roundtrip(void) {
     fastkv_ts_t snap_ts = fastkv_oracle_now(&db->txn_mgr.oracle);
 
     /* Write snapshot */
-    fastkv_err_t rc = fastkv_snapshot_write(tmp, snap_ts, db);
+    char snap_name[33];
+    fastkv_err_t rc = fastkv_snapshot_write(tmp, snap_ts, db, snap_name, sizeof snap_name);
     TEST_ASSERT_EQUAL_INT(FASTKV_OK, rc);
 
     /* Open a fresh db and load the snapshot */
@@ -65,7 +66,8 @@ void test_snapshot_write_load_roundtrip(void) {
 
 void test_snapshot_empty_db(void) {
     fastkv_ts_t  ts = fastkv_oracle_now(&db->txn_mgr.oracle);
-    fastkv_err_t rc = fastkv_snapshot_write(tmp, ts, db);
+    char snap_name[33];
+    fastkv_err_t rc = fastkv_snapshot_write(tmp, ts, db, snap_name, sizeof snap_name);
     TEST_ASSERT_EQUAL_INT(FASTKV_OK, rc);
 }
 
@@ -76,7 +78,8 @@ void test_snapshot_deletes_not_in_snapshot(void) {
     fastkv_put(db, FASTKV_STR("alive"), FASTKV_STR("yes"));
 
     fastkv_ts_t ts = fastkv_oracle_now(&db->txn_mgr.oracle);
-    fastkv_snapshot_write(tmp, ts, db);
+    char snap_name[33];
+    fastkv_snapshot_write(tmp, ts, db, snap_name, sizeof snap_name);
 
     fastkv_close(db);
     db                 = NULL;

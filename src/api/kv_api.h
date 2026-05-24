@@ -6,8 +6,10 @@
 
 #include "index/btree/btree.h"
 #include "index/secondary.h"
+#include "repl/repl.h"
 #include "storage/hashtable/ht.h"
 #include "txn/txn_manager.h"
+#include "util/uuid7/uuid7.h"
 #include "wal/wal.h"
 
 #include <pthread.h>
@@ -36,6 +38,12 @@ struct fastkv_db {
 
     pthread_t    compact_thread;
     _Atomic bool compact_stop;
+
+    uuid7_ctx uuid7; /* untuk penamaan snapshot dan WAL segment */
+
+    /* replikasi — NULL jika tidak aktif */
+    struct fastkv_repl_server *repl_srv; /* sisi primary */
+    struct fastkv_repl_client *repl_cli; /* sisi replica */
 };
 
 fastkv_err_t fastkv_db_apply_write_set(

@@ -1,6 +1,7 @@
 #include "fastkv/types.h"
 
 #include "unity.h"
+#include "util/uuid7/uuid7.h"
 #include "wal/wal.h"
 
 #include <stdio.h>
@@ -9,12 +10,14 @@
 
 static const char   *tmp = "/tmp/fastkv_test_wal_replay";
 static fastkv_wal_t *wal;
+static uuid7_ctx     g_uuid7;
 
 void setUp(void) {
+    uuid7_init(&g_uuid7);
     char cmd[256];
     snprintf(cmd, sizeof cmd, "rm -rf %s && mkdir -p %s", tmp, tmp);
     system(cmd);
-    fastkv_wal_open(&wal, tmp, false);
+    fastkv_wal_open(&wal, tmp, false, &g_uuid7);
 }
 
 void tearDown(void) {
@@ -72,7 +75,7 @@ void test_replay_basic(void) {
     TEST_ASSERT_EQUAL_STRING("<tombstone>", acc.buf[2].val);
 
     /* re-open for tearDown */
-    fastkv_wal_open(&wal, tmp, false);
+    fastkv_wal_open(&wal, tmp, false, &g_uuid7);
 }
 
 void test_replay_since_ts(void) {
@@ -90,12 +93,12 @@ void test_replay_since_ts(void) {
     TEST_ASSERT_EQUAL_STRING("new", acc.buf[0].key);
     TEST_ASSERT_EQUAL_UINT64(15, max_ts);
 
-    fastkv_wal_open(&wal, tmp, false);
+    fastkv_wal_open(&wal, tmp, false, &g_uuid7);
 }
 
 void test_replay_multi_segment(void) {
     fastkv_wal_append(wal, WAL_REC_PUT, 1, FASTKV_STR("k1"), FASTKV_STR("v1"));
-    fastkv_wal_rotate(wal); /* new segment */
+    fastkv_wal_rotate(wal, &g_uuid7); /* new segment */
     fastkv_wal_append(wal, WAL_REC_PUT, 2, FASTKV_STR("k2"), FASTKV_STR("v2"));
     fastkv_wal_close(wal);
     wal = NULL;
@@ -107,7 +110,7 @@ void test_replay_multi_segment(void) {
     TEST_ASSERT_EQUAL_INT(2, acc.n);
     TEST_ASSERT_EQUAL_UINT64(2, max_ts);
 
-    fastkv_wal_open(&wal, tmp, false);
+    fastkv_wal_open(&wal, tmp, false, &g_uuid7);
 }
 
 void test_replay_empty_dir(void) {
@@ -127,7 +130,7 @@ void test_replay_empty_dir(void) {
     TEST_ASSERT_EQUAL_INT(0, acc.n);
     TEST_ASSERT_EQUAL_UINT64(99, max_ts); /* unchanged */
 
-    fastkv_wal_open(&wal, tmp, false);
+    fastkv_wal_open(&wal, tmp, false, &g_uuid7);
 }
 
 int main(void) {

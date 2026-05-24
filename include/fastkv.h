@@ -106,6 +106,32 @@ fastkv_err_t fastkv_stats(fastkv_db_t *db, fastkv_stats_t *out);
 
 void fastkv_set_log_level(int level);
 
+/* Replikasi */
+
+/* Status satu peer (replica atau primary) */
+typedef struct {
+    char     addr[64];      /* "host:port" */
+    bool     connected;
+    uint64_t lag_bytes;     /* byte di belakang primary (sisi replica: primary_offset - received) */
+    uint64_t bytes_total;   /* total byte diterima/dikirim */
+} fastkv_repl_peer_t;
+
+/* Sisi Primary — mulai server replikasi, replica bisa konek ke port ini */
+fastkv_err_t fastkv_repl_serve(fastkv_db_t *db, uint16_t port);
+void         fastkv_repl_stop_server(fastkv_db_t *db);
+
+/* Daftar status semua replica yang terhubung ke primary ini.
+ * Isi array out[0..cap-1], simpan jumlah di *n_out. */
+fastkv_err_t fastkv_repl_peers(fastkv_db_t *db, fastkv_repl_peer_t *out, size_t cap,
+    size_t *n_out);
+
+/* Sisi Replica — konek ke primary dan mulai menerima WAL stream */
+fastkv_err_t fastkv_repl_connect(fastkv_db_t *db, const char *host, uint16_t port);
+void         fastkv_repl_disconnect(fastkv_db_t *db);
+
+/* Status koneksi replica ke primary */
+fastkv_repl_peer_t fastkv_repl_primary_stat(fastkv_db_t *db);
+
 #ifdef __cplusplus
 }
 #endif

@@ -1,4 +1,5 @@
 #include "unity.h"
+#include "util/uuid7/uuid7.h"
 #include "wal/wal.h"
 
 #include <stdio.h>
@@ -7,12 +8,14 @@
 
 static const char   *tmp_dir = "/tmp/fastkv_test_wal";
 static fastkv_wal_t *wal;
+static uuid7_ctx     g_uuid7;
 
 void setUp(void) {
+    uuid7_init(&g_uuid7);
     char cmd[256];
     snprintf(cmd, sizeof cmd, "mkdir -p %s", tmp_dir);
     system(cmd);
-    fastkv_wal_open(&wal, tmp_dir, false);
+    fastkv_wal_open(&wal, tmp_dir, false, &g_uuid7);
 }
 
 void tearDown(void) {
@@ -41,7 +44,7 @@ void test_wal_append_delete(void) {
 }
 
 void test_wal_rotate(void) {
-    fastkv_err_t rc = fastkv_wal_rotate(wal);
+    fastkv_err_t rc = fastkv_wal_rotate(wal, &g_uuid7);
     TEST_ASSERT_EQUAL_INT(FASTKV_OK, rc);
 }
 

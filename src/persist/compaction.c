@@ -29,24 +29,26 @@ fastkv_err_t fastkv_checkpoint(struct fastkv_db *db) {
     /* 2. Assign a checkpoint timestamp = current oracle clock */
     fastkv_ts_t ckpt_ts = fastkv_oracle_now(&db->txn_mgr.oracle);
 
-    /* 3. Write snapshot */
-    rc = fastkv_snapshot_write(db->opts.path, ckpt_ts, db);
+    /* 3. Write snapshot, simpan nama file yang dihasilkan */
+    char snap_name[33];
+    rc = fastkv_snapshot_write(db->opts.path, ckpt_ts, db, snap_name, sizeof snap_name);
     if (rc != FASTKV_OK) {
         LOG_ERROR("checkpoint: snapshot write failed");
         return rc;
     }
 
     /* 4. Rotate WAL so old segments can be trimmed */
-    uint64_t old_seg = fastkv_wal_current_segment(db->wal);
-    rc               = fastkv_wal_rotate(db->wal);
+    char old_seg[33];
+    fastkv_wal_current_segment(db->wal, old_seg, sizeof old_seg);
+    rc = fastkv_wal_rotate(db->wal, &db->uuid7);
     if (rc != FASTKV_OK)
         return rc;
 
-    /* 5. Trim WAL segments that are now covered by the snapshot */
+    /* 5. Trim WAL segments yang sudah ter-cover snapshot */
     fastkv_wal_trim(db->opts.path, old_seg);
 
-    /* 6. Trim old snapshots — keep only the most recent */
-    fastkv_snapshot_trim(db->opts.path, ckpt_ts);
+    /* 6. Trim snapshot lama, pertahankan hanya yang terbaru */
+    fastkv_snapshot_trim(db->opts.path, snap_name);
 
     /* 7. hapus kunci yang sudah TTL expired */
     fastkv_ttl_expire(db);

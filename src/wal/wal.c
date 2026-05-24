@@ -4,6 +4,7 @@
 #include "persist/io.h"
 #include "util/crc32.h"
 #include "util/log.h"
+#include "util/uuid7/uuid7_hex.h"
 
 #include <dirent.h>
 #include <errno.h>
@@ -14,10 +15,11 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define WAL_FILENAME_FMT "%s/wal-%020" PRIu64 ".log"
+/* nama segment: wal-<32 hex char>.log */
 #define WAL_FILENAME_PFX "wal-"
 #define WAL_FILENAME_SFX ".log"
-#define WAL_SEG_ID_LEN 20
+/* panjang bagian hex dalam nama file */
+#define WAL_SEG_ID_LEN 32
 
 #define WAL_BUF_CAP 65536
 
@@ -27,12 +29,16 @@ struct fastkv_wal {
     bool             sync_writes;
     uint64_t         bytes_written;
     uint64_t         file_offset;
-    uint64_t         segment_id;
+    char             segment_id[33]; /* UUID7 hex, 32 char + null */
 
-    uint8_t         buf[WAL_BUF_CAP];
-    size_t          buf_len;
+    uint8_t buf[WAL_BUF_CAP];
+    size_t  buf_len;
 
     pthread_mutex_t lock;
+
+    /* hook replikasi, dipanggil setelah record masuk buffer */
+    fastkv_wal_hook_fn hook_fn;
+    void              *hook_udata;
 };
 
 /* Low-level read helpers for replay */
@@ -48,7 +54,8 @@ static bool read_u64(FILE *f, uint64_t *v) {
 
 /* Lifecycle */
 
-fastkv_err_t fastkv_wal_open(fastkv_wal_t **wal, const char *dir, bool sync_writes) {
+fastkv_err_t fastkv_wal_open(
+    fastkv_wal_t **wal, const char *dir, bool sync_writes, uuid7_ctx *uuid7) {
     fastkv_wal_t *w = fkv_malloc(sizeof(*w));
     if (!w)
         return FASTKV_ERR_NOMEM;
@@ -56,7 +63,7 @@ fastkv_err_t fastkv_wal_open(fastkv_wal_t **wal, const char *dir, bool sync_writ
     memset(w, 0, sizeof(*w));
     pthread_mutex_init(&w->lock, NULL);
     size_t dirlen = strlen(dir);
-    w->dir = fkv_malloc(dirlen + 1);
+    w->dir        = fkv_malloc(dirlen + 1);
     if (!w->dir) {
         fkv_free(w);
         return FASTKV_ERR_NOMEM;
@@ -64,25 +71,36 @@ fastkv_err_t fastkv_wal_open(fastkv_wal_t **wal, const char *dir, bool sync_writ
     memcpy(w->dir, dir, dirlen + 1);
     w->sync_writes = sync_writes;
 
-    /* Find the highest existing segment ID */
-    w->segment_id = 0;
-    DIR *d        = opendir(dir);
+    /* Cari segment terbaru (lex terbesar = paling baru karena UUID7 time-ordered) */
+    w->segment_id[0] = '\0';
+    DIR *d           = opendir(dir);
     if (d) {
         struct dirent *ent;
         while ((ent = readdir(d)) != NULL) {
             if (strncmp(ent->d_name, WAL_FILENAME_PFX, strlen(WAL_FILENAME_PFX)) != 0)
                 continue;
-            if (!strstr(ent->d_name, WAL_FILENAME_SFX))
+            const char *sfx = strstr(ent->d_name, WAL_FILENAME_SFX);
+            if (!sfx)
                 continue;
-            uint64_t id = (uint64_t)strtoull(ent->d_name + strlen(WAL_FILENAME_PFX), NULL, 10);
-            if (id >= w->segment_id)
-                w->segment_id = id;
+            /* ambil bagian hex di antara prefix dan suffix */
+            const char *hex     = ent->d_name + strlen(WAL_FILENAME_PFX);
+            size_t      hex_len = (size_t)(sfx - hex);
+            if (hex_len != WAL_SEG_ID_LEN)
+                continue;
+            if (strcmp(hex, w->segment_id) > 0) {
+                memcpy(w->segment_id, hex, WAL_SEG_ID_LEN);
+                w->segment_id[WAL_SEG_ID_LEN] = '\0';
+            }
         }
         closedir(d);
     }
 
+    /* Jika tidak ada segment lama, buat yang baru dengan UUID7 */
+    if (w->segment_id[0] == '\0')
+        uuid7_hex(uuid7, w->segment_id);
+
     char path[4096];
-    snprintf(path, sizeof path, WAL_FILENAME_FMT, dir, w->segment_id);
+    snprintf(path, sizeof path, "%s/" WAL_FILENAME_PFX "%s" WAL_FILENAME_SFX, dir, w->segment_id);
 
     w->file_offset = 0;
     FILE *f_check  = fopen(path, "rb");
@@ -104,8 +122,7 @@ fastkv_err_t fastkv_wal_open(fastkv_wal_t **wal, const char *dir, bool sync_writ
         return rc;
     }
 
-    LOG_DEBUG("WAL opened: segment %" PRIu64 " (%s) offset=%" PRIu64, w->segment_id, path,
-        w->file_offset);
+    LOG_DEBUG("WAL opened: segment %s (%s) offset=%" PRIu64, w->segment_id, path, w->file_offset);
     *wal = w;
     return FASTKV_OK;
 }
@@ -162,16 +179,15 @@ fastkv_err_t fastkv_wal_append(fastkv_wal_t *wal, fastkv_wal_rec_type_t type, fa
     uint32_t vlen = (value.data == NULL) ? WAL_VLEN_TOMBSTONE : (uint32_t)value.len;
 
     uint32_t crc = 0;
-    crc          = fastkv_crc32c(crc, &type, 1);
+    uint8_t  t   = (uint8_t)type;
+    crc          = fastkv_crc32c(crc, &t, 1);
     crc          = fastkv_crc32c(crc, &ts, 8);
     crc          = fastkv_crc32c(crc, &klen, 4);
     crc          = fastkv_crc32c(crc, &vlen, 4);
     if (key.len)
         crc = fastkv_crc32c(crc, key.data, key.len);
-    if (value.len)
+    if (value.data && value.len)
         crc = fastkv_crc32c(crc, value.data, value.len);
-
-    uint8_t t = (uint8_t)type;
 
     pthread_mutex_lock(&wal->lock);
     fastkv_err_t rc;
@@ -187,16 +203,51 @@ fastkv_err_t fastkv_wal_append(fastkv_wal_t *wal, fastkv_wal_rec_type_t type, fa
         goto done;
     if (key.len && (rc = wal_write_buf(wal, key.data, key.len)) != FASTKV_OK)
         goto done;
-    if (value.len && (rc = wal_write_buf(wal, value.data, value.len)) != FASTKV_OK)
+    if (value.data && value.len && (rc = wal_write_buf(wal, value.data, value.len)) != FASTKV_OK)
         goto done;
 
     wal->bytes_written += WAL_HEADER_SIZE + key.len + (value.data ? value.len : 0);
+
+    /* notifikasi hook replikasi dengan raw record yang baru ditulis */
+    if (wal->hook_fn) {
+        /* susun record ke buffer sementara untuk dikirim ke replica */
+        size_t   rec_len = WAL_HEADER_SIZE + key.len + (value.data ? value.len : 0);
+        uint8_t *tmp     = malloc(rec_len);
+        if (tmp) {
+            uint8_t *p = tmp;
+            memcpy(p, &crc, 4);
+            p += 4;
+            memcpy(p, &t, 1);
+            p += 1;
+            memcpy(p, &ts, 8);
+            p += 8;
+            memcpy(p, &klen, 4);
+            p += 4;
+            memcpy(p, &vlen, 4);
+            p += 4;
+            if (key.len) {
+                memcpy(p, key.data, key.len);
+                p += key.len;
+            }
+            if (value.data && value.len)
+                memcpy(p, value.data, value.len);
+            wal->hook_fn(tmp, rec_len, wal->hook_udata);
+            free(tmp);
+        }
+    }
 
     if (wal->sync_writes)
         rc = flush_buf(wal, true);
 done:
     pthread_mutex_unlock(&wal->lock);
     return rc;
+}
+
+void fastkv_wal_set_hook(fastkv_wal_t *wal, fastkv_wal_hook_fn fn, void *udata) {
+    pthread_mutex_lock(&wal->lock);
+    wal->hook_fn    = fn;
+    wal->hook_udata = udata;
+    pthread_mutex_unlock(&wal->lock);
 }
 
 fastkv_err_t fastkv_wal_sync(fastkv_wal_t *wal) {
@@ -210,20 +261,23 @@ fastkv_err_t fastkv_wal_sync(fastkv_wal_t *wal) {
 
 /* Replay */
 
-static int cmp_u64(const void *a, const void *b) {
-    uint64_t x = *(const uint64_t *)a;
-    uint64_t y = *(const uint64_t *)b;
-    return (x > y) - (x < y);
+/* buffer untuk satu nama segment (hex saja, tanpa prefix/suffix) */
+#define WAL_SEG_NAME_BUF (WAL_SEG_ID_LEN + 1)
+
+static int cmp_seg_name(const void *a, const void *b) {
+    return strcmp(*(const char *const *)a, *(const char *const *)b);
 }
 
-static fastkv_err_t collect_segments(const char *dir, uint64_t **ids_out, size_t *count_out) {
+/* Kumpulkan nama-nama segment (32 hex char) dari dir, diurutkan ascending.
+ * Caller harus free setiap elemen dan array-nya. */
+static fastkv_err_t collect_segments(const char *dir, char ***names_out, size_t *count_out) {
     DIR *d = opendir(dir);
     if (!d)
         return FASTKV_ERR_IO;
 
-    size_t    cap = 64, n = 0;
-    uint64_t *ids = fkv_malloc(cap * sizeof(*ids));
-    if (!ids) {
+    size_t cap = 64, n = 0;
+    char **names = fkv_malloc(cap * sizeof(*names));
+    if (!names) {
         closedir(d);
         return FASTKV_ERR_NOMEM;
     }
@@ -232,25 +286,42 @@ static fastkv_err_t collect_segments(const char *dir, uint64_t **ids_out, size_t
     while ((ent = readdir(d)) != NULL) {
         if (strncmp(ent->d_name, WAL_FILENAME_PFX, strlen(WAL_FILENAME_PFX)) != 0)
             continue;
-        if (!strstr(ent->d_name, WAL_FILENAME_SFX))
+        const char *sfx = strstr(ent->d_name, WAL_FILENAME_SFX);
+        if (!sfx)
             continue;
-        uint64_t id = (uint64_t)strtoull(ent->d_name + strlen(WAL_FILENAME_PFX), NULL, 10);
+        const char *hex    = ent->d_name + strlen(WAL_FILENAME_PFX);
+        size_t      hexlen = (size_t)(sfx - hex);
+        if (hexlen != WAL_SEG_ID_LEN)
+            continue;
+
         if (n >= cap) {
             cap *= 2;
-            uint64_t *tmp = fkv_realloc(ids, cap * sizeof(*ids));
+            char **tmp = fkv_realloc(names, cap * sizeof(*names));
             if (!tmp) {
-                fkv_free(ids);
+                for (size_t i = 0; i < n; i++)
+                    fkv_free(names[i]);
+                fkv_free(names);
                 closedir(d);
                 return FASTKV_ERR_NOMEM;
             }
-            ids = tmp;
+            names = tmp;
         }
-        ids[n++] = id;
+        names[n] = fkv_malloc(WAL_SEG_NAME_BUF);
+        if (!names[n]) {
+            for (size_t i = 0; i < n; i++)
+                fkv_free(names[i]);
+            fkv_free(names);
+            closedir(d);
+            return FASTKV_ERR_NOMEM;
+        }
+        memcpy(names[n], hex, WAL_SEG_ID_LEN);
+        names[n][WAL_SEG_ID_LEN] = '\0';
+        n++;
     }
     closedir(d);
 
-    qsort(ids, n, sizeof(*ids), cmp_u64);
-    *ids_out   = ids;
+    qsort(names, n, sizeof(*names), cmp_seg_name);
+    *names_out = names;
     *count_out = n;
     return FASTKV_OK;
 }
@@ -364,15 +435,16 @@ static fastkv_err_t replay_segment(const char *path, fastkv_ts_t since_ts, fastk
 
 fastkv_err_t fastkv_wal_replay(const char *dir, fastkv_ts_t since_ts, fastkv_wal_replay_fn fn,
     void *udata, fastkv_ts_t *max_ts_out) {
-    uint64_t *ids   = NULL;
-    size_t    count = 0;
+    char **names = NULL;
+    size_t count = 0;
 
-    fastkv_err_t rc = collect_segments(dir, &ids, &count);
+    fastkv_err_t rc = collect_segments(dir, &names, &count);
     if (rc != FASTKV_OK)
         return rc;
 
     if (count == 0) {
-        fkv_free(ids);
+        fkv_free(names);
+        LOG_INFO("WAL replay: 0 segments, 0 records replayed, max_ts=0");
         return FASTKV_OK;
     }
 
@@ -381,7 +453,7 @@ fastkv_err_t fastkv_wal_replay(const char *dir, fastkv_ts_t since_ts, fastkv_wal
     char        path[4096];
 
     for (size_t i = 0; i < count; i++) {
-        snprintf(path, sizeof path, WAL_FILENAME_FMT, dir, ids[i]);
+        snprintf(path, sizeof path, "%s/" WAL_FILENAME_PFX "%s" WAL_FILENAME_SFX, dir, names[i]);
         rc = replay_segment(path, since_ts, fn, udata, &max_ts, &total);
         if (rc != FASTKV_OK)
             break;
@@ -392,61 +464,71 @@ fastkv_err_t fastkv_wal_replay(const char *dir, fastkv_ts_t since_ts, fastkv_wal
 
     if (max_ts_out)
         *max_ts_out = max_ts;
-    fkv_free(ids);
+
+    for (size_t i = 0; i < count; i++)
+        fkv_free(names[i]);
+    fkv_free(names);
     return rc;
 }
 
 /* Maintenance */
 
-fastkv_err_t fastkv_wal_rotate(fastkv_wal_t *wal) {
+fastkv_err_t fastkv_wal_rotate(fastkv_wal_t *wal, uuid7_ctx *uuid7) {
     pthread_mutex_lock(&wal->lock);
     flush_buf(wal, true);
     if (wal->io)
         fastkv_io_close(wal->io);
 
-    wal->segment_id++;
+    uuid7_hex(uuid7, wal->segment_id);
     wal->file_offset = 0;
 
     char path[4096];
-    snprintf(path, sizeof path, WAL_FILENAME_FMT, wal->dir, wal->segment_id);
+    snprintf(
+        path, sizeof path, "%s/" WAL_FILENAME_PFX "%s" WAL_FILENAME_SFX, wal->dir, wal->segment_id);
 
     fastkv_err_t rc = fastkv_io_open(&wal->io, path, O_CREAT | O_RDWR);
     pthread_mutex_unlock(&wal->lock);
     if (rc != FASTKV_OK)
         return rc;
 
-    LOG_INFO("WAL rotated to segment %" PRIu64, wal->segment_id);
+    LOG_INFO("WAL rotated to segment %s", wal->segment_id);
     return FASTKV_OK;
 }
 
-fastkv_err_t fastkv_wal_trim(const char *dir, uint64_t keep_from_id) {
-    uint64_t    *ids   = NULL;
+fastkv_err_t fastkv_wal_trim(const char *dir, const char *keep_from_name) {
+    char       **names = NULL;
     size_t       count = 0;
-    fastkv_err_t rc    = collect_segments(dir, &ids, &count);
+    fastkv_err_t rc    = collect_segments(dir, &names, &count);
     if (rc != FASTKV_OK)
         return rc;
 
     char     path[4096];
     uint64_t removed = 0;
     for (size_t i = 0; i < count; i++) {
-        if (ids[i] >= keep_from_id)
+        /* hapus segment yang secara leksikografis lebih kecil (lebih lama) */
+        if (strcmp(names[i], keep_from_name) >= 0)
             continue;
-        snprintf(path, sizeof path, WAL_FILENAME_FMT, dir, ids[i]);
+        snprintf(path, sizeof path, "%s/" WAL_FILENAME_PFX "%s" WAL_FILENAME_SFX, dir, names[i]);
         if (remove(path) == 0)
             removed++;
     }
     LOG_INFO("WAL trim: removed %" PRIu64 " old segment(s)", removed);
-    fkv_free(ids);
+
+    for (size_t i = 0; i < count; i++)
+        fkv_free(names[i]);
+    fkv_free(names);
     return FASTKV_OK;
 }
 
-uint64_t fastkv_wal_current_segment(fastkv_wal_t *wal) {
-    if (!wal)
-        return 0;
+void fastkv_wal_current_segment(fastkv_wal_t *wal, char *buf, size_t cap) {
+    if (!wal || cap < WAL_SEG_NAME_BUF) {
+        if (buf && cap > 0)
+            buf[0] = '\0';
+        return;
+    }
     pthread_mutex_lock(&wal->lock);
-    uint64_t id = wal->segment_id;
+    memcpy(buf, wal->segment_id, WAL_SEG_NAME_BUF);
     pthread_mutex_unlock(&wal->lock);
-    return id;
 }
 uint64_t fastkv_wal_bytes_written(fastkv_wal_t *wal) {
     if (!wal)

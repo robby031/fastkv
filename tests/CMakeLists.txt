@@ -51,6 +51,7 @@ add_fastkv_test(test_secondary_index    integration/test_secondary_index.c)
 add_fastkv_test(test_json_index         integration/test_json_index.c)
 add_fastkv_test(test_ttl                integration/test_ttl.c)
 add_fastkv_test(test_stress             integration/test_stress.c)
+add_fastkv_test(test_replication        unit/test_replication.c)
 
 # Fuzz targets (clang only)  
 if(FASTKV_BUILD_FUZZ)

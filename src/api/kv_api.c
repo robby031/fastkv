@@ -9,8 +9,10 @@
 #include "persist/compaction.h"
 #include "persist/snapshot.h"
 #include "persist/ttl.h"
+#include "repl/repl.h"
 #include "util/hash.h"
 #include "util/log.h"
+#include "util/uuid7/uuid7.h"
 
 #include <inttypes.h>
 #include <stdlib.h>
@@ -126,13 +128,14 @@ fastkv_err_t fastkv_open(fastkv_db_t **db_out, const fastkv_opts_t *opts) {
     fastkv_oracle_advance(&db->txn_mgr.oracle, wal_max_ts + 1);
 
     if (!opts->read_only) {
-        rc = fastkv_wal_open(&db->wal, opts->path, opts->sync_writes);
+        rc = fastkv_wal_open(&db->wal, opts->path, opts->sync_writes, &db->uuid7);
         if (rc != FASTKV_OK)
             goto fail;
     }
 
     pthread_rwlock_init(&db->index_lock, NULL);
     pthread_mutex_init(&db->commit_lock, NULL);
+    uuid7_init(&db->uuid7);
     atomic_init(&db->stat_num_keys, 0);
     atomic_init(&db->stat_snapshot_count, 0);
     atomic_init(&db->compact_stop, false);
@@ -163,6 +166,18 @@ fail:
 fastkv_err_t fastkv_close(fastkv_db_t *db) {
     if (!db)
         return FASTKV_OK;
+
+    /* hentikan replikasi sebelum WAL ditutup */
+    if (db->repl_srv) {
+        fastkv_repl_server_destroy(db->repl_srv);
+        fkv_free(db->repl_srv);
+        db->repl_srv = NULL;
+    }
+    if (db->repl_cli) {
+        fastkv_repl_client_destroy(db->repl_cli);
+        fkv_free(db->repl_cli);
+        db->repl_cli = NULL;
+    }
 
     fastkv_compaction_stop(db);
 
@@ -619,4 +634,108 @@ fastkv_err_t fastkv_stats(fastkv_db_t *db, fastkv_stats_t *out) {
     out->snapshot_count    = atomic_load(&db->stat_snapshot_count);
     out->arena_alloc_bytes = 0;
     return FASTKV_OK;
+}
+
+/* WAL hook untuk forward record ke repl server */
+static void repl_wal_hook(const void *data, size_t len, void *udata) {
+    struct fastkv_repl_server *srv = udata;
+    fastkv_repl_broadcast(srv, data, len);
+}
+
+/* Replikasi — Primary */
+
+fastkv_err_t fastkv_repl_serve(fastkv_db_t *db, uint16_t port) {
+    if (!db || db->repl_srv)
+        return FASTKV_ERR_INVAL;
+
+    struct fastkv_repl_server *srv = fkv_malloc(sizeof(*srv));
+    if (!srv)
+        return FASTKV_ERR_NOMEM;
+
+    fastkv_err_t rc = fastkv_repl_server_init(srv, db, port);
+    if (rc != FASTKV_OK) {
+        fkv_free(srv);
+        return rc;
+    }
+
+    db->repl_srv = srv;
+
+    /* pasang hook ke WAL supaya setiap record diteruskan ke replica */
+    if (db->wal)
+        fastkv_wal_set_hook(db->wal, repl_wal_hook, srv);
+
+    return FASTKV_OK;
+}
+
+void fastkv_repl_stop_server(fastkv_db_t *db) {
+    if (!db || !db->repl_srv)
+        return;
+    if (db->wal)
+        fastkv_wal_set_hook(db->wal, NULL, NULL);
+    fastkv_repl_server_destroy(db->repl_srv);
+    fkv_free(db->repl_srv);
+    db->repl_srv = NULL;
+}
+
+fastkv_err_t fastkv_repl_peers(
+    fastkv_db_t *db, fastkv_repl_peer_t *out, size_t cap, size_t *n_out) {
+    if (!db || !out || !n_out)
+        return FASTKV_ERR_INVAL;
+    *n_out = 0;
+    if (!db->repl_srv)
+        return FASTKV_OK;
+
+    struct fastkv_repl_server *srv = db->repl_srv;
+    pthread_mutex_lock(&srv->senders_lock);
+    for (struct repl_sender *s = srv->senders; s && *n_out < cap; s = s->next) {
+        fastkv_repl_peer_t *p = &out[(*n_out)++];
+        strncpy(p->addr, s->addr, sizeof p->addr - 1);
+        p->connected   = atomic_load_explicit(&s->connected, memory_order_acquire);
+        p->lag_bytes   = s->queue_bytes;
+        p->bytes_total = srv->primary_offset; /* total byte WAL yang sudah dihasilkan primary */
+    }
+    pthread_mutex_unlock(&srv->senders_lock);
+    return FASTKV_OK;
+}
+
+/* Replikasi — Replica */
+
+fastkv_err_t fastkv_repl_connect(fastkv_db_t *db, const char *host, uint16_t port) {
+    if (!db || db->repl_cli || !host)
+        return FASTKV_ERR_INVAL;
+
+    struct fastkv_repl_client *cli = fkv_malloc(sizeof(*cli));
+    if (!cli)
+        return FASTKV_ERR_NOMEM;
+
+    fastkv_err_t rc = fastkv_repl_client_init(cli, db, host, port);
+    if (rc != FASTKV_OK) {
+        fkv_free(cli);
+        return rc;
+    }
+
+    db->repl_cli = cli;
+    return FASTKV_OK;
+}
+
+void fastkv_repl_disconnect(fastkv_db_t *db) {
+    if (!db || !db->repl_cli)
+        return;
+    fastkv_repl_client_destroy(db->repl_cli);
+    fkv_free(db->repl_cli);
+    db->repl_cli = NULL;
+}
+
+fastkv_repl_peer_t fastkv_repl_primary_stat(fastkv_db_t *db) {
+    fastkv_repl_peer_t stat = {0};
+    if (!db || !db->repl_cli)
+        return stat;
+
+    struct fastkv_repl_client *cli = db->repl_cli;
+    snprintf(stat.addr, sizeof stat.addr, "%s:%u", cli->host, cli->port);
+    stat.connected   = atomic_load_explicit(&cli->connected, memory_order_acquire);
+    stat.bytes_total = atomic_load_explicit(&cli->bytes_received, memory_order_relaxed);
+    uint64_t primary = atomic_load_explicit(&cli->primary_offset, memory_order_relaxed);
+    stat.lag_bytes   = (primary > stat.bytes_total) ? (primary - stat.bytes_total) : 0;
+    return stat;
 }

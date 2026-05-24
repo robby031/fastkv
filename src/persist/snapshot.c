@@ -7,6 +7,7 @@
 #include "storage/hashtable/ht.h"
 #include "util/crc32.h"
 #include "util/log.h"
+#include "util/uuid7/uuid7_hex.h"
 
 #include <dirent.h>
 #include <errno.h>
@@ -17,9 +18,10 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define SNAP_FILENAME_FMT "snapshot-%020" PRIu64 ".bin"
+/* nama file: snapshot-<32 hex char>.bin */
 #define SNAP_FILENAME_PFX "snapshot-"
 #define SNAP_FILENAME_SFX ".bin"
+#define SNAP_ID_LEN 32
 
 #define SNAP_BUF_CAP 65536
 
@@ -73,7 +75,8 @@ static void snap_write_u64(struct snap_writer *sw, uint64_t v) {
 
 /* Write */
 
-fastkv_err_t fastkv_snapshot_write(const char *dir, fastkv_ts_t ts, struct fastkv_db *db) {
+fastkv_err_t fastkv_snapshot_write(
+    const char *dir, fastkv_ts_t ts, struct fastkv_db *db, char *name_buf, size_t name_cap) {
     fastkv_ht_t *ht = db->ht;
 
     uint64_t num_keys = 0;
@@ -96,8 +99,14 @@ fastkv_err_t fastkv_snapshot_write(const char *dir, fastkv_ts_t ts, struct fastk
         }
     }
 
+    /* hasilkan nama unik berbasis UUID7 */
+    char id[33];
+    uuid7_hex(&db->uuid7, id);
+    if (name_buf && name_cap >= sizeof id)
+        memcpy(name_buf, id, sizeof id);
+
     char path[4096], tmp_path[4100];
-    snprintf(path, sizeof path, "%s/" SNAP_FILENAME_FMT, dir, ts);
+    snprintf(path, sizeof path, "%s/" SNAP_FILENAME_PFX "%s" SNAP_FILENAME_SFX, dir, id);
     snprintf(tmp_path, sizeof tmp_path, "%s.tmp", path);
 
     fastkv_io_ctx_t *io = NULL;
@@ -154,40 +163,49 @@ fastkv_err_t fastkv_snapshot_write(const char *dir, fastkv_ts_t ts, struct fastk
         return FASTKV_ERR_IO;
     }
 
-    LOG_INFO(
-        "snapshot berhasil ditulis: ts=%" PRIu64 " keys=%" PRIu64 " path=%s", ts, num_keys, path);
+    LOG_INFO("snapshot berhasil ditulis: ts=%" PRIu64 " keys=%" PRIu64 " id=%s", ts, num_keys, id);
     return FASTKV_OK;
 }
 
-/* Load   */
+/* Load */
 
-static fastkv_ts_t find_latest_snapshot(const char *dir, char *path_out, size_t path_cap) {
+/* Kembalikan true jika ada snapshot; path_out diisi path file terbaru. */
+static bool find_latest_snapshot(const char *dir, char *path_out, size_t path_cap) {
     DIR *d = opendir(dir);
     if (!d)
-        return 0;
+        return false;
 
-    fastkv_ts_t    best_ts = 0;
+    char           best_id[SNAP_ID_LEN + 1];
+    bool           found = false;
     struct dirent *ent;
+
+    best_id[0] = '\0';
+
     while ((ent = readdir(d)) != NULL) {
         if (strncmp(ent->d_name, SNAP_FILENAME_PFX, strlen(SNAP_FILENAME_PFX)) != 0)
             continue;
-        if (!strstr(ent->d_name, SNAP_FILENAME_SFX))
+        const char *sfx = strstr(ent->d_name, SNAP_FILENAME_SFX);
+        if (!sfx)
             continue;
-        fastkv_ts_t ts = (fastkv_ts_t)strtoull(ent->d_name + strlen(SNAP_FILENAME_PFX), NULL, 10);
-        if (ts > best_ts) {
-            best_ts = ts;
+        const char *hex    = ent->d_name + strlen(SNAP_FILENAME_PFX);
+        size_t      hexlen = (size_t)(sfx - hex);
+        if (hexlen != SNAP_ID_LEN)
+            continue;
+        /* UUID7 time-ordered → lex terbesar = paling baru */
+        if (!found || strcmp(hex, best_id) > 0) {
+            memcpy(best_id, hex, SNAP_ID_LEN);
+            best_id[SNAP_ID_LEN] = '\0';
             snprintf(path_out, path_cap, "%s/%s", dir, ent->d_name);
+            found = true;
         }
     }
     closedir(d);
-    return best_ts;
+    return found;
 }
 
 fastkv_err_t fastkv_snapshot_load(const char *dir, struct fastkv_db *db, fastkv_ts_t *ts_out) {
-    char        path[4096] = {0};
-    fastkv_ts_t snap_ts    = find_latest_snapshot(dir, path, sizeof path);
-
-    if (snap_ts == 0) {
+    char path[4096] = {0};
+    if (!find_latest_snapshot(dir, path, sizeof path)) {
         LOG_INFO("snapshot: tidak ada snapshot di %s, memulai fresh", dir);
         if (ts_out)
             *ts_out = 0;
@@ -304,9 +322,9 @@ bad:
     return FASTKV_ERR_CORRUPT;
 }
 
-/* Trim old snapshots   */
+/* Trim snapshot lama */
 
-fastkv_err_t fastkv_snapshot_trim(const char *dir, fastkv_ts_t keep_ts) {
+fastkv_err_t fastkv_snapshot_trim(const char *dir, const char *keep_name) {
     DIR *d = opendir(dir);
     if (!d)
         return FASTKV_ERR_IO;
@@ -318,10 +336,18 @@ fastkv_err_t fastkv_snapshot_trim(const char *dir, fastkv_ts_t keep_ts) {
     while ((ent = readdir(d)) != NULL) {
         if (strncmp(ent->d_name, SNAP_FILENAME_PFX, strlen(SNAP_FILENAME_PFX)) != 0)
             continue;
-        if (!strstr(ent->d_name, SNAP_FILENAME_SFX))
+        const char *sfx = strstr(ent->d_name, SNAP_FILENAME_SFX);
+        if (!sfx)
             continue;
-        fastkv_ts_t ts = (fastkv_ts_t)strtoull(ent->d_name + strlen(SNAP_FILENAME_PFX), NULL, 10);
-        if (ts >= keep_ts)
+        const char *hex    = ent->d_name + strlen(SNAP_FILENAME_PFX);
+        size_t      hexlen = (size_t)(sfx - hex);
+        if (hexlen != SNAP_ID_LEN)
+            continue;
+        /* pertahankan snapshot yang namanya >= keep_name (lex) */
+        char id[SNAP_ID_LEN + 1];
+        memcpy(id, hex, SNAP_ID_LEN);
+        id[SNAP_ID_LEN] = '\0';
+        if (strcmp(id, keep_name) >= 0)
             continue;
         snprintf(path, sizeof path, "%s/%s", dir, ent->d_name);
         if (remove(path) == 0) {

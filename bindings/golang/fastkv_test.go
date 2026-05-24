@@ -5,6 +5,7 @@ import (
 	"os"
 	"sync"
 	"testing"
+	"time"
 )
 
 func dbPath(t *testing.T) string {
@@ -235,6 +236,192 @@ func BenchmarkPut(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		key := fmt.Sprintf("key%d", i)
 		db.Put([]byte(key), []byte("value"))
+	}
+}
+
+// waitUntil menunggu kondisi terpenuhi atau timeout.
+func waitUntil(t *testing.T, timeout time.Duration, cond func() bool) bool {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if cond() {
+			return true
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	return false
+}
+
+func TestReplServeConnect(t *testing.T) {
+	pPath, rPath := dbPath(t), dbPath(t)
+	defer os.RemoveAll(pPath)
+	defer os.RemoveAll(rPath)
+
+	opts := DefaultOpts()
+	opts.SyncWrites = false
+
+	primary, err := Open(pPath, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer primary.Close()
+
+	replica, err := Open(rPath, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer replica.Close()
+
+	if err := primary.Serve(17801); err != nil {
+		t.Fatal("Serve:", err)
+	}
+	defer primary.StopServer()
+
+	if err := replica.Connect("127.0.0.1", 17801); err != nil {
+		t.Fatal("Connect:", err)
+	}
+	defer replica.Disconnect()
+
+	ok := waitUntil(t, 5*time.Second, func() bool {
+		return replica.PrimaryStat().Connected
+	})
+	if !ok {
+		t.Fatal("replica tidak terhubung dalam 5 detik")
+	}
+
+	stat := replica.PrimaryStat()
+	if !stat.Connected {
+		t.Error("PrimaryStat.Connected harus true")
+	}
+}
+
+func TestReplPutPropagates(t *testing.T) {
+	pPath, rPath := dbPath(t), dbPath(t)
+	defer os.RemoveAll(pPath)
+	defer os.RemoveAll(rPath)
+
+	opts := DefaultOpts()
+	opts.SyncWrites = false
+
+	primary, _ := Open(pPath, opts)
+	defer primary.Close()
+	replica, _ := Open(rPath, opts)
+	defer replica.Close()
+
+	primary.Serve(17802)
+	defer primary.StopServer()
+	replica.Connect("127.0.0.1", 17802)
+	defer replica.Disconnect()
+
+	waitUntil(t, 5*time.Second, func() bool {
+		return replica.PrimaryStat().Connected
+	})
+
+	primary.Put([]byte("hello"), []byte("world"))
+	primary.Put([]byte("foo"), []byte("bar"))
+
+	ok := waitUntil(t, 5*time.Second, func() bool {
+		v, err := replica.Get([]byte("hello"))
+		return err == nil && string(v) == "world"
+	})
+	if !ok {
+		t.Fatal("key 'hello' tidak muncul di replica")
+	}
+
+	v, err := replica.Get([]byte("foo"))
+	if err != nil || string(v) != "bar" {
+		t.Errorf("key 'foo': got %q %v", v, err)
+	}
+}
+
+func TestReplDeletePropagates(t *testing.T) {
+	pPath, rPath := dbPath(t), dbPath(t)
+	defer os.RemoveAll(pPath)
+	defer os.RemoveAll(rPath)
+
+	opts := DefaultOpts()
+	opts.SyncWrites = false
+
+	primary, _ := Open(pPath, opts)
+	defer primary.Close()
+	replica, _ := Open(rPath, opts)
+	defer replica.Close()
+
+	primary.Serve(17803)
+	defer primary.StopServer()
+	replica.Connect("127.0.0.1", 17803)
+	defer replica.Disconnect()
+
+	waitUntil(t, 5*time.Second, func() bool {
+		return replica.PrimaryStat().Connected
+	})
+
+	primary.Put([]byte("temp"), []byte("data"))
+
+	waitUntil(t, 5*time.Second, func() bool {
+		_, err := replica.Get([]byte("temp"))
+		return err == nil
+	})
+
+	primary.Delete([]byte("temp"))
+
+	ok := waitUntil(t, 5*time.Second, func() bool {
+		_, err := replica.Get([]byte("temp"))
+		return err == ErrNotFound
+	})
+	if !ok {
+		t.Fatal("delete tidak terpropagasi ke replica")
+	}
+}
+
+func TestReplPeers(t *testing.T) {
+	pPath, rPath := dbPath(t), dbPath(t)
+	defer os.RemoveAll(pPath)
+	defer os.RemoveAll(rPath)
+
+	opts := DefaultOpts()
+	opts.SyncWrites = false
+
+	primary, _ := Open(pPath, opts)
+	defer primary.Close()
+	replica, _ := Open(rPath, opts)
+	defer replica.Close()
+
+	primary.Serve(17804)
+	defer primary.StopServer()
+	replica.Connect("127.0.0.1", 17804)
+	defer replica.Disconnect()
+
+	waitUntil(t, 5*time.Second, func() bool {
+		return replica.PrimaryStat().Connected
+	})
+
+	for i := 0; i < 100; i++ {
+		primary.Put([]byte(fmt.Sprintf("k%d", i)), []byte(fmt.Sprintf("v%d", i)))
+	}
+
+	waitUntil(t, 5*time.Second, func() bool {
+		v, err := replica.Get([]byte("k99"))
+		return err == nil && string(v) == "v99"
+	})
+
+	peers, err := primary.Peers()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(peers) != 1 {
+		t.Fatalf("expected 1 peer, got %d", len(peers))
+	}
+	if !peers[0].Connected {
+		t.Error("peer harus connected")
+	}
+
+	pstat := replica.PrimaryStat()
+	if !pstat.Connected {
+		t.Error("primary stat harus connected")
+	}
+	if pstat.BytesTotal == 0 {
+		t.Error("BytesTotal harus > 0 setelah menerima data")
 	}
 }
 

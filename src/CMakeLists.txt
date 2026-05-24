@@ -6,6 +6,9 @@ add_library(fastkv STATIC
     util/log_public.c
     util/crc32.c
     util/hash.c
+    util/uuid7/uuid7.c
+    util/uuid7/clock.c
+    util/uuid7/prng.c
 
     # mem
     mem/allocator.c
@@ -34,6 +37,10 @@ add_library(fastkv STATIC
 
     # ttl
     persist/ttl.c
+
+    # replication
+    repl/repl_server.c
+    repl/repl_client.c
 
     # api
     api/kv_api.c

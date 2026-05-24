@@ -417,3 +417,80 @@ const (
 func SetLogLevel(level LogLevel) {
 	C.fastkv_set_log_level(C.int(level))
 }
+
+// ReplPeer berisi status satu peer replikasi (replica atau primary).
+type ReplPeer struct {
+	Addr       string // "host:port"
+	Connected  bool
+	LagBytes   uint64 // byte di belakang primary
+	BytesTotal uint64 // total byte diterima/dikirim
+}
+
+// Serve memulai server replikasi di port yang diberikan.
+// Primary akan meneruskan setiap WAL record ke semua replica yang terhubung.
+func (db *DB) Serve(port uint16) error {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+	return toError(C.fastkv_repl_serve(db.ptr, C.uint16_t(port)))
+}
+
+// StopServer menghentikan server replikasi dan memutus semua replica.
+func (db *DB) StopServer() {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+	C.fastkv_repl_stop_server(db.ptr)
+}
+
+// Peers mengembalikan daftar status semua replica yang sedang terhubung.
+func (db *DB) Peers() ([]ReplPeer, error) {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+
+	const cap = 64
+	var buf [cap]C.fastkv_repl_peer_t
+	var n C.size_t
+	if err := toError(C.fastkv_repl_peers(db.ptr, &buf[0], cap, &n)); err != nil {
+		return nil, err
+	}
+	out := make([]ReplPeer, int(n))
+	for i := range out {
+		p := buf[i]
+		out[i] = ReplPeer{
+			Addr:       C.GoString(&p.addr[0]),
+			Connected:  bool(p.connected),
+			LagBytes:   uint64(p.lag_bytes),
+			BytesTotal: uint64(p.bytes_total),
+		}
+	}
+	return out, nil
+}
+
+// Connect menghubungkan database ini sebagai replica ke primary di host:port.
+// WAL record dari primary akan langsung diterapkan ke database lokal.
+func (db *DB) Connect(host string, port uint16) error {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+	chost := C.CString(host)
+	defer C.free(unsafe.Pointer(chost))
+	return toError(C.fastkv_repl_connect(db.ptr, chost, C.uint16_t(port)))
+}
+
+// Disconnect memutus koneksi replica dari primary.
+func (db *DB) Disconnect() {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+	C.fastkv_repl_disconnect(db.ptr)
+}
+
+// PrimaryStat mengembalikan status koneksi replica ke primary-nya.
+func (db *DB) PrimaryStat() ReplPeer {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+	p := C.fastkv_repl_primary_stat(db.ptr)
+	return ReplPeer{
+		Addr:       C.GoString(&p.addr[0]),
+		Connected:  bool(p.connected),
+		LagBytes:   uint64(p.lag_bytes),
+		BytesTotal: uint64(p.bytes_total),
+	}
+}
